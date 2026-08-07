@@ -1,0 +1,4 @@
+- [RAH-OIP lab topology](rah_oip_lab_topology.md) — online VM (this machine) + offline validation VM + Legion; why the two-VM air-gapped test setup exists
+- [RAH-OIP environment reference file](rah_oip_environment_reference_file.md) — pointer to the living doc with current IPs/credentials/gotchas for those machines
+- [Voice Project release validation](voice_project_release_validation.md) — Blood Bank app's real (SQL Server) architecture vs. its Postgres-assuming plan doc; Scenario A status
+- [STT-SCHEDULE release validation](stt_schedule_release_validation.md) — OR scheduling app; `@` in POSTGRES_PASSWORD breaks its DATABASE_URL; Postgres port needs manual exposure for DBeaver

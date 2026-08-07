@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────
+# Large binary artifacts — not version-controlled.
+# These are either redistributable third-party software (Docker
+# image exports, .deb packages, JDBC drivers) or a packaged archive
+# of content already tracked elsewhere in this repo as a directory.
+# Regenerate them from the documented build process rather than
+# committing them; see README.md and docs/RAH-OIP_Architecture_Proposal.md.
+# ─────────────────────────────────────────────────────────────
+
+# Docker image exports (Portainer, PostgreSQL, SQL Server, etc.)
+*.tar
+
+# Curated APT package pool (~500 .deb files, ~377MB) — rebuild via
+# the documented apt-get download / dpkg-scanpackages process.
+# The package index (Packages) stays small enough to keep; the
+# compressed index (Packages.gz) and the .deb payloads do not.
+*.deb
+
+# Packaged release archives, e.g. RAH-OIP-1.0.0_Debian13_2026-07-09.zip
+# — a zip of content already present and tracked as a directory under
+# rah-oip-releases/. Regenerate the archive from that directory.
+*.zip
+
+# Third-party JDBC drivers (DBeaver database drivers)
+*.jar
+
+# Compressed APT index (derivable from the uncompressed Packages file)
+*.gz
+
+# ─────────────────────────────────────────────────────────────
+# Real credentials for the physical lab environment (VM root/user
+# passwords, SSH key paths). Keep local-only, never in git history —
+# this is a different risk class than the test-only passwords
+# mentioned incidentally in the lessons-learned docs.
+# ─────────────────────────────────────────────────────────────
+docs/RAH-OIP_LAB_ENVIRONMENT_REFERENCE.md

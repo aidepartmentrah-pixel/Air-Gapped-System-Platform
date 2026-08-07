@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────
+# Infrastructure Release binaries — see infrastructure/README.md.
+# The RAH-OIP Infrastructure Release engineering content (scripts,
+# manifest, docs, checksums) IS tracked, under infrastructure/. Its
+# binary payload is not: Docker image exports, the curated .deb
+# package pool, and the packaged release archive are large,
+# redistributable/regenerable content, kept physically present on
+# disk for local build/test convenience but never committed.
+# ─────────────────────────────────────────────────────────────
+*.tar
+*.deb
+*.zip
+*.gz
+
+# ─────────────────────────────────────────────────────────────
+# Packager-generated Application Release output and build artifacts —
+# these are produced, not authored; regenerate them, don't commit them.
+# ─────────────────────────────────────────────────────────────
+**/dist/
+**/build/
+*_Release_*/
+docker-images/*.tar
+
+# ─────────────────────────────────────────────────────────────
+# VM / Hyper-V artifacts — snapshots and exports never belong in Git,
+# see docs/infrastructure-reference/golden-baseline.md.
+# ─────────────────────────────────────────────────────────────
+*.vhdx
+*.vhd
+*.vmcx
+*.vmrs
+
+# ─────────────────────────────────────────────────────────────
+# Credentials and local secrets — never committed. Real environment
+# credentials live outside this repo entirely (see
+# docs/infrastructure-reference/lab-environment-sanitized.md for what
+# was intentionally left out and why).
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+**/*credentials*
+**/*LAB_ENVIRONMENT_REFERENCE*
+
+# ─────────────────────────────────────────────────────────────
+# Language/tooling ecosystem noise (Packager is Python, Platform is
+# Python + a web frontend per Architecture V1).
+# ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+*.log
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ─────────────────────────────────────────────────────────────
+# Editor/OS noise
+# ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
