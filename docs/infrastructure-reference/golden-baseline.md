@@ -51,11 +51,16 @@ installed and verified:
 RAH-OIP-1.0.0_Debian13_2026-07-09
 ```
 
-Source of this release's engineering content (scripts, manifest, checksums,
-validation report — not the multi-GB binaries) is tracked separately; see
-`RAH-Offline-Platform-Export` on the Legion's Desktop, which is its own local
-git repository. It is deliberately not copied into this repository — see
-`README.md` for why.
+This release's engineering content (scripts, manifest, checksums, validation
+report) is tracked directly in this repository under `infrastructure/` — see
+`infrastructure/README.md`. Its multi-GB binaries (Docker image `.tar`
+exports, the curated `.deb` package pool) are gitignored but present on disk
+alongside the tracked content for local build/test use.
+
+The original source of this material, `RAH-Offline-Platform-Export` on the
+Legion's Desktop (its own separate local git repository), still exists as
+historical raw material but is no longer the canonical copy — this
+repository is.
 
 ---
 

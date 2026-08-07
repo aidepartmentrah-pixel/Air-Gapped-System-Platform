@@ -36,6 +36,34 @@ Status: NOT STARTED
 4. Review Contract completion decisions (EXTRACTED / COMPLETED / ARCHITECTURE CONFLICT).
 5. Begin Period A development (Packager and Platform, independently).
 
+## Candidate Applications for Packager/Platform Acceptance Testing
+
+Five real hospital applications exist as candidates for the "choose the real
+application" decision (Current Mission step 5 onward). They are distinct,
+unrelated applications despite two of the names looking similar:
+
+- **HCAT** — backend `C:\Users\it\Documents\GitHub\Patient_Feedback`,
+  frontend `C:\Users\it\Documents\GitHub\Front_End_Feedback_Analysis`. Not
+  yet run through the offline validation pipeline.
+- **HCopilot** — `C:\Users\it\Documents\HCopilot\HCopilot`. A **different,
+  unrelated** application from HCAT — SQL Server-backed. Already validated;
+  see `docs/development/application-validation-lessons.md`.
+- **STT-SCHEDULE** — `C:\Users\it\Documents\GitHub\STT-SCHEDULE`. Postgres +
+  pgAdmin. Already validated.
+- **Voice Project (Blood Bank)** —
+  `C:\Users\it\Documents\GitHub\voice-project_Deployment`. SQL Server +
+  Whisper speech-to-text. Already validated.
+- **Indicator (Healthcare Reporting)** —
+  `C:\Users\it\Documents\GitHub\Healthcare_reporting_system_backup`. No
+  database, simplest of the five. Already validated.
+
+The four already-validated applications carry real, confirmed bugs and fixes
+from offline-simulator testing — see
+`docs/development/application-validation-lessons.md` for what broke and why
+it matters for the Release Contract and Packager design specifically
+(placeholder-password handling, host-mount UID ownership, port
+reconfigurability, offline-only runtime behavior).
+
 ## Current Blocking Dependency
 
 Executable Release Contract V1 has not yet been materialized:
