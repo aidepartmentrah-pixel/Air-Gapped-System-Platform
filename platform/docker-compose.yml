@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: rah_platform
+      POSTGRES_USER: rah_platform
+      POSTGRES_PASSWORD: rah_platform
+    volumes:
+      - rah_platform_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rah_platform -d rah_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      RAH_DATABASE_URL: postgresql+psycopg://rah_platform:rah_platform@postgres:5432/rah_platform
+      RAH_RELEASE_STORAGE_PATH: /data/releases
+      RAH_LOG_LEVEL: INFO
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../tests/fixtures/releases:/data/releases
+    ports:
+      - "8000:8000"
+
+volumes:
+  rah_platform_pg_data:

@@ -81,7 +81,23 @@ Table.md`.
 
 ## Period A — Platform
 
-Status: NOT STARTED
+Status: **Slicing proposal reviewed and accepted** (`PL0`–`PL9`, same
+rigor as the Packager review). Findings: boundaries sound overall; `PL8`
+(Backup/Update/Recovery) and `PL9` (UI/Offline Acceptance) are tracked as
+paired sub-slices (`PL8a`/`PL8b`, `PL9a`/`PL9b`) for testing-signal
+reasons; `PL3`/`PL4` each got one clarifying implementation note. No
+redesign, no new V1 capability. **`PL0` (Runtime, Database & Test
+Foundation) is DONE** — `platform/` (FastAPI + SQLAlchemy/Alembic +
+`docker` SDK), real Docker Compose deployment (backend + PostgreSQL 16) on
+this Online Debian VM, 21/21 tests pass, all 8 required proofs verified
+live against the real built container, including both failure paths
+(PostgreSQL stopped → `503`/`PLT-DATABASE-003` without a backend crash;
+Docker socket unmounted → `503`/`PLT-DOCKER-001`). Deliberately independent
+of the Packager track — no Packager output involved, only the
+`tests/fixtures/releases/` placeholder Golden-fixture directory the plan
+calls for. `PL1` (Generic Operation Framework) is next. See
+`docs/development/Period A — Independent Product Development;
+Platform/2. Initial Slicing Task Table.md`.
 
 ## Period B — Integration
 
@@ -111,9 +127,14 @@ Status: NOT STARTED
    (Claude Knowledge Bridge, `rah prepare-answers` + `rah validate-answers`),
    `P4` (Release Planning, `rah plan`), and `P5` (Docker Build and
    Artifact Preparation, `rah build`) all done and tested. `P6` (Release
-   Construction) is next. Platform track not started. See
+   Construction) is next. See
    `docs/development/Period A — Independent Product Development;
-   Packager/2. Initial Slicing Task Table.md`.
+   Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
+   proposal reviewed and accepted, `PL0` (Runtime, Database & Test
+   Foundation) done and tested, `PL1` (Generic Operation Framework) next —
+   see
+   `docs/development/Period A — Independent Product Development;
+   Platform/2. Initial Slicing Task Table.md`.
 
 ## Candidate Applications for Packager/Platform Acceptance Testing
 
