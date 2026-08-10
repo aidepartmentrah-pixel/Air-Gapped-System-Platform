@@ -432,3 +432,95 @@ def test_build_command_reports_structured_error_for_broken_dockerfile(tmp_path):
     assert isinstance(result.exception, SystemExit), "unexpected crash, not a controlled exit"
     assert envelope["ok"] is False
     assert envelope["error"]["code"] == "PKG-DOCKER-BUILD-FAILED"
+
+
+# --- `rah construct` (P6, real Docker build against the real Engine) ---
+
+
+def test_construct_command_returns_valid_json_envelope(tmp_path):
+    from rah_packager.engineering_answers import compute_inspection_fingerprint
+    from rah_packager.inspection import inspect_project
+    from rah_packager.project_state import build_initial_state, project_state_path
+    from rah_packager.validate_answers import default_answers_path
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "scripts").mkdir()
+    (project / "scripts" / "install_offline.sh").write_text("#!/bin/sh\necho install\n")
+    (project / "scripts" / "verify_installation.sh").write_text("#!/bin/sh\necho verify\n")
+    (project / "RELEASE_NOTES.md").write_text("# Release Notes")
+    (project / "app").mkdir()
+    (project / "app" / "Dockerfile").write_text("FROM scratch\nCOPY hello.txt /hello.txt\n")
+    (project / "app" / "hello.txt").write_text("hello\n")
+    (project / "docker-compose.yml").write_text(
+        "services:\n  app:\n    build:\n      context: ./app\n      dockerfile: Dockerfile\n"
+    )
+    subprocess.run(["git", "init", "--quiet", "-b", "main"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=project, check=True)
+    subprocess.run(["git", "add", "."], cwd=project, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "init"], cwd=project, check=True)
+
+    slug = "cli-construct-app"
+    state = build_initial_state("CLI Construct App", slug, "1.0.0")
+    state_path = project_state_path(project)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state))
+
+    inspection_result = inspect_project(project)
+    answers = {
+        "schema_version": "1.0",
+        "based_on": {
+            "git_commit": inspection_result["git"]["commit"],
+            "inspection_fingerprint": compute_inspection_fingerprint(inspection_result),
+        },
+        "application": {"description": "A CLI construction test application."},
+        "compatibility": {"minimum_rah_oip_version": "1.0", "supported_architectures": ["amd64"]},
+        "deployment": {
+            "entrypoints": {
+                "install": "scripts/install_offline.sh",
+                "verify": "scripts/verify_installation.sh",
+            },
+            "supported_operations": {"fresh_install": True},
+        },
+        "configuration": {"inputs": []},
+        "database": {"required": False},
+        "persistent_state": {"preserve_during_update": []},
+        "offline_requirements": {
+            "public_internet_required": False,
+            "public_registry_required": False,
+            "public_cdn_required": False,
+            "online_model_registry_required": False,
+        },
+        "models": {"required": False},
+        "client": {"preparation_required": False, "https_required": False},
+        "verification": {"entrypoint": "scripts/verify_installation.sh", "required_checks": []},
+        "documentation": {
+            "release_notes": "RELEASE_NOTES.md",
+            "installation": "RELEASE_NOTES.md",
+            "update": "RELEASE_NOTES.md",
+            "recovery": "RELEASE_NOTES.md",
+            "known_issues": "RELEASE_NOTES.md",
+        },
+    }
+    answers_path = default_answers_path(project)
+    answers_path.parent.mkdir(parents=True, exist_ok=True)
+    answers_path.write_text(json.dumps(answers))
+
+    try:
+        runner = CliRunner()
+        result, envelope = _invoke_json(
+            runner,
+            ["construct", "--project", str(project), "--output", str(tmp_path / "output")],
+        )
+
+        assert result.exit_code == 0
+        assert envelope["ok"] is True
+        assert envelope["command"] == "construct"
+        assert envelope["result"]["version"] == "1.0.0"
+        assert Path(envelope["result"]["manifest_path"]).is_file()
+    finally:
+        try:
+            docker.from_env().images.remove(f"rah-{slug}-app:1.0.0", force=True)
+        except docker.errors.ImageNotFound:
+            pass

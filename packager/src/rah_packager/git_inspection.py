@@ -44,6 +44,18 @@ def _current_tag(repo_path: Path) -> str | None:
     return result.stdout.strip()
 
 
+def _remote_url(repo_path: Path) -> str | None:
+    """None if no `origin` remote is configured — a normal, valid state
+    for a local-only repository, not a failure. Needed by P6's Release
+    Manifest `source.repository` field; P2 didn't need it, so it wasn't
+    captured until now.
+    """
+    result = _run_git(repo_path, "config", "--get", "remote.origin.url")
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
 def inspect_git(repo_path: str | Path) -> dict:
     """Assumes `repo_path` is already a confirmed Git repository (P1's
     `.git`-exists check). Raises GitInspectionError if `git` plumbing
@@ -68,4 +80,5 @@ def inspect_git(repo_path: str | Path) -> dict:
         "commit": commit,
         "tag": tag,
         "state": "dirty" if status else "clean",
+        "remote_url": _remote_url(path),
     }

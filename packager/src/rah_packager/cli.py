@@ -14,6 +14,7 @@ import click
 
 from rah_packager import __version__
 from rah_packager.config import Config
+from rah_packager.construct_release import construct_release
 from rah_packager.docker_build import build_release_images
 from rah_packager.errors import PackagerError
 from rah_packager.health import run_health_check
@@ -221,6 +222,52 @@ def build(project_path: str, output_dir: str, application_slug: str, version: st
         click.echo(render(failure("build", exc)))
         sys.exit(1)
     click.echo(render(ok("build", data)))
+
+
+@main.command(name="construct")
+@click.option(
+    "--project",
+    "project_path",
+    required=True,
+    type=click.Path(),
+    help="Path to the application repository to construct a candidate Release for.",
+)
+@click.option(
+    "--output",
+    "output_dir",
+    required=True,
+    type=click.Path(),
+    help="Directory the candidate Release directory is created under.",
+)
+@click.option(
+    "--increment",
+    "increment",
+    default="patch",
+    type=click.Choice(["patch", "minor", "major"]),
+    show_default=True,
+    help="Version increment to propose (ignored before the first Release).",
+)
+@click.option(
+    "--answers",
+    "answers_path",
+    default=None,
+    type=click.Path(),
+    help="Path to engineering-answers.json (defaults to <project>/.rah/engineering-answers.json).",
+)
+@click.option("--summary", "summary", default=None, help="Release summary (defaults to a generic one).")
+def construct(
+    project_path: str, output_dir: str, increment: str, answers_path: str | None, summary: str | None
+) -> None:
+    """Construct a temporary candidate Release: real Docker builds, a
+    generated release.yaml, and every declared resource copied into the
+    Contract-defined directory structure. Not yet validated or finalized.
+    """
+    try:
+        data = construct_release(project_path, output_dir, increment, answers_path, summary)
+    except PackagerError as exc:
+        click.echo(render(failure("construct", exc)))
+        sys.exit(1)
+    click.echo(render(ok("construct", data)))
 
 
 if __name__ == "__main__":

@@ -398,3 +398,65 @@ class EngineeringAnswersWriteError(PackagerError):
             code="PKG-FILESYSTEM-ENGINEERING-ANSWERS-WRITE-FAILED",
             message=f"Could not write engineering answers: {detail}",
         )
+
+
+class ReleaseManifestSchemaError(PackagerError):
+    """A generated `release.yaml` failed schema validation against the
+    real, frozen `contracts/1.0/release-manifest.schema.json`. Defensive,
+    not user-facing in the normal case — the Packager itself constructs
+    the manifest, so hitting this means a bug in `release_manifest.py`.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(
+            code="PKG-RELEASE-MANIFEST-SCHEMA-INVALID",
+            message=f"Generated Release Manifest failed schema validation: {detail}",
+        )
+
+
+class ReleaseManifestIncompleteError(PackagerError):
+    """Validated engineering answers are structurally valid (P3's own
+    checks passed) but missing a value the Release Manifest schema
+    requires outright — e.g. no `verification.entrypoint`, or
+    configuration inputs declared with no template to render them into.
+    Distinct from every P3 error: this is "valid but not enough to build
+    a Release from", not "invalid".
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(
+            code="PKG-RELEASE-MANIFEST-INCOMPLETE",
+            message=f"Engineering answers are not sufficient to construct a Release: {detail}",
+        )
+
+
+class ReleaseModelArtifactsNotSupportedError(PackagerError):
+    """`models.required: true` with declared artifacts — computing
+    `baked_into_image`/`checksum` and associating each artifact with the
+    Docker image it's baked into is genuinely unimplemented (matches
+    HCAT's own deferral for the same reason: multi-model complexity, see
+    docs/development/CURRENT.md, "Acceptance decision"). Deliberately not
+    guessed or fabricated.
+    """
+
+    def __init__(self):
+        super().__init__(
+            code="PKG-RELEASE-MODELS-NOT-SUPPORTED",
+            message=(
+                "Constructing a Release with declared model artifacts is not yet "
+                "supported (matches HCAT's deferral — see CURRENT.md)."
+            ),
+        )
+
+
+class ReleaseConstructionWriteError(PackagerError):
+    """Assembling the candidate Release directory (copying scripts,
+    configuration, documentation, verification resources, images, or
+    writing release.yaml/compose) failed at the filesystem level.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(
+            code="PKG-FILESYSTEM-RELEASE-CONSTRUCTION-FAILED",
+            message=f"Could not construct the candidate Release: {detail}",
+        )

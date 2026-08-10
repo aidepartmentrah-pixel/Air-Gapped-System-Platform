@@ -3,10 +3,11 @@
 ## Current Phase
 
 Period A, Packager track. Release Contract V1 is **FROZEN** (user-confirmed).
-Packager `P0`–`P5` are all done — `P5` (Docker Build and Artifact
-Preparation) finished with `rah build` built, tested, and live-proven
-with real builds against both real acceptance apps (HCopilot and
-Indicator). `P6` (Release Construction) is next.
+Packager `P0`–`P6` are all done — `P6` (Release Construction) finished
+with `rah construct` built, tested, and live-proven with real candidate
+Releases against both real acceptance apps (HCopilot and Indicator).
+`P7` (Validation, Finalization and Independent Offline Proof) is next —
+the Period A Packager finish line.
 
 ## Architecture
 
@@ -75,9 +76,52 @@ and real, full builds against **both** required acceptance apps —
 HCopilot (explicit `context`/`dockerfile` Compose form, real
 apt/pip-heavy backend build, ~496 MB archive) and Indicator (shorthand
 `build: ./service` Compose form, ~144 MB archive) — both succeeded for
-real, proofs cleaned up afterward. See `docs/development/Period A —
-Independent Product Development; Packager/2. Initial Slicing Task
-Table.md`.
+real, proofs cleaned up afterward.
+**P6 DONE** (Release Construction — "where previous pieces finally
+combine"). `rah construct` assembles a temporary candidate Release
+directory per `release-layout.yaml`, generating `release.yaml` from
+Project Version State + Inspection Result + validated Engineering
+Answers + Build Artifact Metadata + Release Plan, all five P1–P5 inputs
+combined for the first time. `RELEASE_MANIFEST_SCHEMA` embedded verbatim
+from the real, frozen `contracts/1.0/release-manifest.schema.json` (a
+dedicated test asserts zero drift from the real file, structurally).
+Rewrites the app's own `docker-compose.yml` so `build:` stanzas become
+`image:` references to the images `rah build` actually produced — the
+Release ships pre-built images, not source. Three new real gaps between
+"structurally valid engineering answers" (P3's own bar) and "enough to
+construct a Release" resolved as explicit, named blocks rather than
+silent defaults: missing `verification.entrypoint`, configuration inputs
+declared with no template, and declared model artifacts (models require
+computing `baked_into_image`/`checksum`, deliberately unimplemented —
+matches HCAT's own deferral). `docker.images[]` only includes services
+P5 actually built, a known, documented scope gap (same as P5's own).
+Unconditional overwrite re-run behavior, same precedent as
+`rah prepare-answers`. 17 new tests, 146/146 total pass, including a
+dedicated `RC-REPRO-001` reproducibility test (construct twice, diff
+everything except `release.created_at` and image archive bytes).
+Live-proven against the real built container with real, full candidate
+Releases for **both** required acceptance apps: HCopilot (real Claude-
+generated answers caught by the existing `validate-answers` consistency
+gate on the first, unedited attempt — Claude answered two database
+entrypoints with inline shell commands instead of script paths; corrected
+by omitting them, both optional — then a full real candidate Release:
+2 real images, real compose rewrite, real manifest, `verification.entrypoint`
+and all documentation resources present) and Indicator (same story:
+first attempt correctly rejected — no lifecycle scripts exist in the
+real repo at all, Claude's `docker-compose.yml` fallback correctly didn't
+match; corrected, then blocked again by a real, separate finding — the
+real Indicator repo's Dockerfiles are uncommitted local WIP that a
+disposable `git clone` never picks up, `PKG-DOCKER-BUILD-FAILED` reported
+it cleanly rather than crashing — copied the real Dockerfiles in,
+succeeded). Also found and worked around, not a Packager bug: Windows
+host git (`core.autocrlf=true`) vs. the container's Linux git disagree on
+every line ending in a `git clone`d repo, making every file look
+"modified" from inside the container even though nothing changed —
+documented as a real environmental gap (extends P0's "container-only"
+finding to Git behavior, not just Docker connectivity), worked around
+per-repo via `git config core.autocrlf true` + `git checkout -- .` run
+from inside the container. See `docs/development/Period A — Independent
+Product Development; Packager/2. Initial Slicing Task Table.md`.
 
 ## Period A — Platform
 
@@ -125,9 +169,10 @@ Status: NOT STARTED
    **IN PROGRESS**. Packager `P0`, `P1` (Project Initialization,
    `rah init`), `P2` (Repository Inspection, `rah inspect`), `P3`
    (Claude Knowledge Bridge, `rah prepare-answers` + `rah validate-answers`),
-   `P4` (Release Planning, `rah plan`), and `P5` (Docker Build and
-   Artifact Preparation, `rah build`) all done and tested. `P6` (Release
-   Construction) is next. See
+   `P4` (Release Planning, `rah plan`), `P5` (Docker Build and
+   Artifact Preparation, `rah build`), and `P6` (Release Construction,
+   `rah construct`) all done and tested. `P7` (Validation, Finalization
+   and Independent Offline Proof) is next. See
    `docs/development/Period A — Independent Product Development;
    Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
@@ -194,17 +239,20 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-None. Packager `P0`–`P5` are all done. `P6` (Release Construction) has no
-open design gap — the manifest/layout it constructs against already
-exist as real, frozen files in `contracts/1.0/`. See the Master
-Development Matrix in the Slicing Task Table for its dependencies.
+None. Packager `P0`–`P6` are all done. `P7` (Validation, Finalization and
+Independent Offline Proof) has no open design gap — the Compliance
+Report/checksum schemas it needs already exist as real, frozen files in
+`contracts/1.0/`. See the Master Development Matrix in the Slicing Task
+Table for its dependencies.
 
 ## Next Major Gate
 
-Packager `P6` (Release Construction) — "where previous pieces finally
-combine": assembling a complete, finalized, immutable Release directory
-per `release-layout.yaml`, using P1's state, P3's answers, P4's plan, and
-P5's built/exported images together for the first time.
+Packager `P7` (Validation, Finalization and Independent Offline Proof) —
+the Period A Packager finish line: `rah validate`/`rah package` turning a
+P6 candidate Release into a finalized, immutable Release (checksums,
+Compliance Report, Release fingerprint, Project Version State update
+only after finalization succeeds), then an independent offline
+qualification proof against a real offline VM.
 
 ## Future Design Tasks (not yet started)
 
@@ -241,6 +289,12 @@ P5's built/exported images together for the first time.
     wired into `cli.py` — every command currently calls `sys.exit(1)` on
     any `PackagerError`, regardless of category. Same status as above:
     designed, not implemented, not yet needed by anything.
+  - P6 added a second outlier alongside `PKG-RUNTIME-*`: its four new
+    error codes use `PKG-RELEASE-MANIFEST-*`/`PKG-RELEASE-MODELS-*`
+    rather than the architecture's own named `PKG-MANIFEST` category.
+    Same reasoning as `PKG-RUNTIME-*` — a real, identified failure mode
+    needed a code now; which category prefix it should carry is a
+    namespace-design decision, not something to guess mid-slice.
 
 ## Related References
 

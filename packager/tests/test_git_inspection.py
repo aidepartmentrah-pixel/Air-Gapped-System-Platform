@@ -102,6 +102,26 @@ def test_untagged_commit_reports_no_tag(tmp_path):
     assert facts["tag"] is None
 
 
+# --- Remote URL (P6's source.repository) ---
+
+
+def test_no_remote_reports_none(tmp_path):
+    _init_repo_with_commit(tmp_path)
+
+    facts = inspect_git(tmp_path)
+
+    assert facts["remote_url"] is None
+
+
+def test_configured_remote_is_reported(tmp_path):
+    _init_repo_with_commit(tmp_path)
+    _git(tmp_path, "remote", "add", "origin", "https://example.com/rah-hcat.git")
+
+    facts = inspect_git(tmp_path)
+
+    assert facts["remote_url"] == "https://example.com/rah-hcat.git"
+
+
 # --- Failure: repository with no commits yet ---
 
 
