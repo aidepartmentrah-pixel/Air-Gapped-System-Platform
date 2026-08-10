@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: rah-packager
+Version: 0.0.1
+Summary: RAH Packaging Engine — turns an application source repository into a Contract-compliant Application Release.
+Requires-Python: >=3.11
+Requires-Dist: click>=8.1
+Requires-Dist: docker>=7.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"

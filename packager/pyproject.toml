@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rah-packager"
+version = "0.0.1"
+description = "RAH Packaging Engine — turns an application source repository into a Contract-compliant Application Release."
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "docker>=7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+rah = "rah_packager.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

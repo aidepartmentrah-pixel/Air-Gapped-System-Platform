@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rah-release-system/contracts/1.0/compliance-report.schema.json",
+  "title": "RAH Release Compliance Report",
+  "description": "Validates instances of compliance/release-compliance-report.json — the formal engineering record produced by the Release Validator after evaluating a Release against Release Contract 1.0. Not a deployment report, not a qualification report, not an installation log (4. Stage 4...md Sec 7.1-7.2). Immutable once generated; if the Release changes, a completely new validation cycle runs (Sec 7.10). Neither the Offline Platform nor the Offline Qualification Procedure shall modify this report (Sec 7.12).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "validator_version",
+    "generated_at",
+    "release_identity",
+    "validation_environment",
+    "overall_result",
+    "summary",
+    "rules"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "EXTRACTED — Sec 7.5, Sec 9.21, Sec 8.14."
+    },
+    "generator_version": {
+      "type": "string",
+      "description": "EXTRACTED — Sec 9.21, Sec 8.14: 'Generator version where available' — the only version field in this schema that is explicitly optional, since a Compliance Report can in principle be produced by re-validating an existing Release without the original Generator being available."
+    },
+    "validator_version": {
+      "type": "string",
+      "description": "EXTRACTED — Sec 7.5, Sec 9.21, Sec 8.14. A Validator update must not silently change what a given rule means for an already-frozen Release (Sec 9.23)."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "EXTRACTED — Sec 7.5 ('validation timestamp')."
+    },
+    "release_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["application_slug", "version", "release_fingerprint"],
+      "description": "COMPLETED — Sec 9.21 requires 'Release identity' in the report but does not enumerate its sub-fields; these three are the minimum needed to unambiguously identify which Release this report covers, matching the identity fields used elsewhere in the Contract (release-manifest.schema.json#/application/slug, #/release/version, and the Release fingerprint referenced in PackagingResult, 4.6...md Sec 6.6).",
+      "properties": {
+        "application_slug": { "type": "string" },
+        "version": { "type": "string" },
+        "release_fingerprint": { "type": "string" }
+      }
+    },
+    "validation_environment": {
+      "type": "string",
+      "description": "EXTRACTED — Sec 9.21 ('validation environment'). Free-text/identifier describing where validation ran (e.g. Packager runtime version and OS)."
+    },
+    "overall_result": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"],
+      "description": "EXTRACTED — Sec 7.7. Only PASS/FAIL are permitted; no ambiguous or partially-successful overall state (Sec 9.2). PASS = every mandatory validation rule succeeded. FAIL = at least one mandatory validation rule failed."
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rules_executed", "rules_passed", "rules_failed"],
+      "description": "EXTRACTED — Sec 7.9 minimum statistics.",
+      "properties": {
+        "rules_executed": { "type": "integer", "minimum": 0 },
+        "rules_passed": { "type": "integer", "minimum": 0 },
+        "rules_failed": { "type": "integer", "minimum": 0 },
+        "rules_not_applicable": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "COMPLETED — not in the Sec 7.9 minimal list, but NOT_APPLICABLE is a defined outcome state (Sec 9.8) and Sec 9.21 requires the report to include not-applicable explanations, so a count is included for completeness."
+        },
+        "rules_not_executed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "COMPLETED — same reasoning as rules_not_applicable, for the NOT_EXECUTED outcome state."
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "EXTRACTED — Sec 7.6 canonical example, Sec 7.8 required per-rule fields, Sec 9.21 fuller list (adds not-applicable/not-executed explanations).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "category", "result", "message"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "EXTRACTED — Sec 7.8. Corresponds to an id in validation-rules.json, e.g. RC-DIR-001. COMPLETED: category-code length varies (RC-DB is 2 letters, RC-REPRO is 5), so the pattern below is deliberately wider than a fixed 3 letters — matches every category actually declared in validation-rules.json#/categories.",
+            "pattern": "^RC-[A-Z]{2,6}-[0-9]{3}$"
+          },
+          "category": {
+            "type": "string",
+            "description": "EXTRACTED — Sec 7.6 example. One of the categories declared in validation-rules.json#/categories."
+          },
+          "result": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "NOT_APPLICABLE", "NOT_EXECUTED"],
+            "description": "EXTRACTED — Sec 9.8 outcome states."
+          },
+          "message": {
+            "type": "string",
+            "description": "EXTRACTED — Sec 7.8 ('human-readable explanation'). For NOT_APPLICABLE, states why the rule's trigger condition did not apply. For NOT_EXECUTED, states which earlier fatal failure prevented evaluation. Sec 9.17: shall never print a complete secret value here."
+          }
+        }
+      }
+    }
+  },
+  "$comment": "Deliberately-omitted fields, recorded so a future session doesn't silently re-add them without a Contract version bump. severity: named only as a possible FUTURE field in Sec 7.8 ('optional future fields explicitly deferred, not in v1: execution duration; severity; supporting evidence') — deliberately absent from Contract 1.0. operator / who-validated identity: no such field exists anywhere in the architecture's Compliance Report description — the process is described as fully deterministic/automated with no human-operator-identity field. If an audit trail by person is ever needed, that is a MINOR-or-later Contract addition, not an omission to silently fix now."
+}

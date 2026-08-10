@@ -1,0 +1,401 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rah-release-system/contracts/1.0/release-manifest.schema.json",
+  "title": "RAH Application Release Manifest",
+  "description": "Structural/type schema for release.yaml under Release Contract 1.0. Cross-field, conditional, and semantic rules (e.g. 'install entrypoint required if fresh_install supported') are deliberately NOT encoded here — the architecture's own Validator pipeline treats 'manifest schema validation' and 'cross-field/semantic validation' as separate steps (Architecture 4. Stage 4 Sec 9.5). Those rules live in validation-rules.json instead. COMPLETED: JSON Schema draft version (draft-07) is a tooling choice, not architecture-specified.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_schema_version",
+    "application",
+    "release",
+    "source",
+    "compatibility",
+    "deployment",
+    "configuration",
+    "docker",
+    "database",
+    "persistent_state",
+    "offline_requirements",
+    "models",
+    "client",
+    "verification",
+    "documentation",
+    "integrity"
+  ],
+  "properties": {
+    "manifest_schema_version": {
+      "type": "string",
+      "description": "Version of this manifest structure itself. Distinct from application/Release/Contract/RAH-OIP versions (Architecture Sec 11.3). The Platform shall reject a manifest whose schema version it does not support.",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "slug", "description"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "slug": {
+          "type": "string",
+          "description": "Must match Project Version State. Determines the canonical deployment path /opt/rah/apps/<slug>.",
+          "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+        },
+        "description": { "type": "string" }
+      }
+    },
+
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "created_at", "summary", "release_type", "engineering_state"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Semantic version. Must match Project Version State, the Git tag, and the Release directory name.",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Release finalization time only — not qualification, transfer, install, or update time."
+        },
+        "summary": { "type": "string" },
+        "release_type": { "type": "string", "const": "application" },
+        "engineering_state": {
+          "type": "string",
+          "description": "Initial allowed value for a finalized artifact is awaiting_offline_qualification only. Shall not be written as 'qualified' by the Packaging Software.",
+          "enum": ["awaiting_offline_qualification"]
+        }
+      }
+    },
+
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "git_commit", "source_dirty"],
+      "properties": {
+        "repository": { "type": "string" },
+        "git_commit": {
+          "type": "string",
+          "description": "Full Git commit hash.",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "git_tag": { "type": "string", "description": "Recommended form: v<version>." },
+        "source_dirty": {
+          "type": "boolean",
+          "description": "A finalized Release should normally require source_dirty: false; should reject dirty source unless an explicit exceptional policy permits it."
+        }
+      }
+    },
+
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_contract_version", "minimum_rah_oip_version", "supported_architectures"],
+      "properties": {
+        "release_contract_version": { "type": "string", "const": "1.0" },
+        "minimum_rah_oip_version": { "type": "string" },
+        "supported_architectures": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["amd64", "arm64"] },
+          "minItems": 1
+        },
+        "required_shared_services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "minimum_version", "required"],
+            "properties": {
+              "id": { "type": "string" },
+              "minimum_version": { "type": "string" },
+              "required": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_path", "compose_project_name", "entrypoints", "supported_operations", "transition"],
+      "properties": {
+        "canonical_path": {
+          "type": "string",
+          "description": "Must equal /opt/rah/apps/<slug>."
+        },
+        "compose_project_name": {
+          "type": "string",
+          "description": "Stable across versions. Shall NOT contain the Release version."
+        },
+        "entrypoints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "install": { "type": "string" },
+            "update": { "type": "string" },
+            "verify": { "type": "string" },
+            "backup": { "type": "string" },
+            "restore": { "type": "string" }
+          },
+          "description": "Relative paths under scripts/. Existence and executability are cross-field concerns validated by RC-SCR rules, not this schema."
+        },
+        "supported_operations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fresh_install"],
+          "properties": {
+            "fresh_install": { "type": "boolean" },
+            "update": { "type": "boolean", "default": false },
+            "downgrade": { "type": "boolean", "default": false },
+            "reinstall": { "type": "boolean" }
+          }
+        },
+        "transition": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accepted_installed_versions": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "requires_existing_deployment_for_update": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "inputs"],
+      "properties": {
+        "template": { "type": "string" },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "label", "type", "required", "source"],
+            "properties": {
+              "key": { "type": "string" },
+              "label": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": ["string", "integer", "boolean", "port", "password", "path", "hostname", "ip_address", "url", "choice"]
+              },
+              "required": { "type": "boolean" },
+              "source": {
+                "type": "string",
+                "enum": ["operator", "generated", "platform", "fixed"]
+              },
+              "default": {},
+              "secret": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+
+    "docker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compose_file", "images"],
+      "properties": {
+        "compose_file": { "type": "string" },
+        "images": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["service", "repository", "tag", "archive", "required"],
+            "properties": {
+              "service": { "type": "string" },
+              "repository": { "type": "string" },
+              "tag": { "type": "string" },
+              "archive": { "type": "string", "description": "Relative path under docker-images/." },
+              "required": { "type": "boolean" },
+              "digest": { "type": "string", "description": "Reserved for future use." }
+            }
+          }
+        }
+      }
+    },
+
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "platform": {
+          "type": "string",
+          "enum": ["postgresql", "sqlserver", "mysql", "sqlite"]
+        },
+        "deployment_mode": {
+          "type": "string",
+          "enum": ["application_managed", "shared_service", "external_existing"]
+        },
+        "target_schema_version": { "type": "string" },
+        "initialization": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "entrypoint": { "type": "string" } }
+        },
+        "migration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required_for_update": { "type": "boolean" },
+            "entrypoint": { "type": "string" }
+          }
+        },
+        "backup_before_update": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required": { "type": "boolean" },
+            "entrypoint": { "type": "string" }
+          }
+        },
+        "recovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "entrypoint": { "type": "string" } }
+        }
+      },
+      "description": "When required=false, platform/deployment_mode/etc. are omitted rather than null — absence itself is the declaration (Architecture Sec 28: 'no required section may be omitted; when a capability is unused, the section shall explicitly declare that fact rather than disappearing' applies at the database.required level, not to every child field)."
+    },
+
+    "persistent_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preserve_during_update"],
+      "properties": {
+        "preserve_during_update": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "production_configuration",
+              "generated_credentials",
+              "database_data",
+              "docker_volumes",
+              "uploaded_files",
+              "certificates",
+              "deployment_history"
+            ]
+          }
+        },
+        "custom_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "offline_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["public_internet_required", "public_registry_required", "public_cdn_required", "online_model_registry_required"],
+      "properties": {
+        "public_internet_required": { "type": "boolean", "default": false },
+        "public_registry_required": { "type": "boolean", "default": false },
+        "public_cdn_required": { "type": "boolean", "default": false },
+        "online_model_registry_required": { "type": "boolean", "default": false }
+      },
+      "description": "Shall normally all be false. A Release declaring required public Internet access shall not be accepted (RC-OFF)."
+    },
+
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "artifacts"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "version", "baked_into_image", "checksum"],
+            "properties": {
+              "id": { "type": "string" },
+              "version": { "type": "string" },
+              "source_registry": {
+                "type": "string",
+                "description": "Where the model originated at packaging time (e.g. a HuggingFace repo + revision, matching the precedent in HCAT's own models.lock.yaml). Provenance only — not consulted at install time."
+              },
+              "baked_into_image": {
+                "type": "string",
+                "description": "COMPLETED: replaces the architecture's original 'packaged_path' field. This project bakes all application-specific binary content, ML models included, into a Docker image rather than shipping it as a separately extracted Release asset (see docs/decisions/packager-responsibility-boundaries.md). Names the docker.images[].service the model is baked into."
+              },
+              "checksum": {
+                "type": "string",
+                "description": "Computed by the Packaging Engine from the source model file(s) at packaging time, before the Docker build — not verified by re-extracting the image at install time. Provenance/traceability only.",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preparation_required", "https_required"],
+      "properties": {
+        "preparation_required": { "type": "boolean" },
+        "https_required": { "type": "boolean" },
+        "secure_browser_capabilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "required_checks"],
+      "properties": {
+        "entrypoint": { "type": "string" },
+        "required_checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Standard identifier, or an application-specific check in the form application:<slug>-<name>."
+          }
+        }
+      }
+    },
+
+    "documentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_notes", "installation", "update", "recovery", "known_issues"],
+      "properties": {
+        "release_notes": { "type": "string" },
+        "installation": { "type": "string" },
+        "update": { "type": "string" },
+        "recovery": { "type": "string" },
+        "known_issues": { "type": "string" }
+      }
+    },
+
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checksum_algorithm", "checksum_file"],
+      "properties": {
+        "checksum_algorithm": { "type": "string", "const": "sha256" },
+        "checksum_file": { "type": "string", "const": "checksums/SHA256SUMS" }
+      },
+      "description": "The manifest itself (release.yaml) shall be included in the checksum set."
+    }
+  }
+}

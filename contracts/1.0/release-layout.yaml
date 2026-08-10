@@ -1,0 +1,190 @@
+# RAH Application Release Contract — Release Layout
+# Contract version: 1.0
+#
+# Defines the canonical on-disk shape of an Application Release. The Release
+# Validator validates this structure before validating anything inside it
+# (Architecture: "4. Stage 4 — Choose Implementation Mechanisms.md" §2.14,
+# line 2814).
+#
+# Provenance tags used throughout this file:
+#   EXTRACTED  — taken directly from explicit architecture prose.
+#   COMPLETED  — the architecture left a gap or was silent; filled here
+#                using engineering judgment. Flagged for review before
+#                Contract V1 is frozen (see
+#                docs/development/contract-v1-completion-log.md).
+
+schema_version: "1.0"
+
+# EXTRACTED — "4. Stage 4...md" §2.2, line 2756.
+# "<ApplicationName>_Release_<SemanticVersion>", e.g. HCAT_Release_1.4.2.
+# Application Name and Semantic Version must match the Release Manifest.
+# No spaces. Case-sensitive.
+release_directory_naming:
+  pattern: "{application_name}_Release_{semantic_version}"
+  rules:
+    - application_name shall match release-manifest.json#/application/name
+    - semantic_version shall match release-manifest.json#/release/version
+    - no spaces permitted anywhere in the directory name
+    - the directory name is case-sensitive
+
+# EXTRACTED — "4. Stage 4...md" §2.3/§2.4, lines 2781-2839.
+# Every path is relative to the Release root.
+required_structure:
+  "release.yaml":
+    type: file
+    required: true
+    description: >
+      The single authoritative Release Manifest. Exactly one shall exist
+      (RC-DIR-002). Immutable once the Release is frozen.
+
+  "compose/":
+    type: directory
+    required: true
+    description: Deployment definitions.
+    required_contents:
+      - "compose/docker-compose.yml"
+
+  "docker-images/":
+    type: directory
+    required: true
+    description: >
+      Every Docker image archive required by the Release, including any
+      application-specific data (e.g. ML models) baked into an image at
+      build time — see docker-images/README.md in this Contract version's
+      companion documentation for the "bake, don't extract" policy. The
+      Offline Platform shall never pull a required runtime image from the
+      Internet.
+
+  "scripts/":
+    type: directory
+    required: true
+    description: Executable lifecycle scripts.
+    known_contents:
+      - install_offline.sh
+      - update_offline.sh
+      - verify_deployment.sh
+      # backup/recovery scripts also live here when declared by the
+      # Manifest's database.backup_before_update / database.recovery
+      # entry points.
+
+  "configuration/":
+    type: directory
+    required: true
+    description: >
+      Configuration templates. Shall never contain production secrets
+      (RC-CFG-001).
+
+  "database/":
+    type: directory
+    required: conditional
+    condition: "release-manifest.json#/database/required == true"
+    description: >
+      Database initialization/migration resources. Omitted entirely when
+      the Manifest declares database.required: false — its absence is not
+      an error in that case.
+
+  "documentation/":
+    type: directory
+    required: true
+    description: >
+      Install guide, update guide, recovery guide, release notes, known
+      issues — paths declared under release.yaml#/documentation.
+
+  "verification/":
+    type: directory
+    required: true
+    description: >
+      Release-specific verification resources required by the Offline
+      Qualification procedure.
+
+  "checksums/":
+    type: directory
+    required: true
+    description: Integrity manifest for the finalized Release.
+    required_contents:
+      - "checksums/SHA256SUMS"
+    notes:
+      - >
+        SHA256SUMS shall not list itself (architecture "4. Stage 4...md"
+        §9.18, line 5512-5549 — the checksum-bootstrapping sequencing
+        rule: everything else is validated and generated first, then
+        SHA256SUMS is generated last, covering release.yaml, artifacts,
+        scripts, documentation, verification resources, and the Compliance
+        Report).
+
+  "compliance/":
+    type: directory
+    required: true
+    description: >
+      Generated, not authored. Contains the Compliance Report produced by
+      the Release Validator after successful validation.
+    required_contents:
+      - "compliance/release-compliance-report.json"
+    notes:
+      - >
+        A FAILED validation run's report is not guaranteed to live here —
+        only a successful (PASS) Compliance Report becomes part of the
+        immutable, frozen Release ("4. Stage 4...md" §9.21).
+
+# COMPLETED — no top-level `models/` (or `assets/`) directory exists
+# anywhere in the frozen architecture's canonical tree (§2.3/§2.4). The
+# architecture's Manifest `models` section (§23, lines 2129-2154) assumes a
+# `packaged_path` pointing at an extracted, standalone model file — that
+# assumption predates this project's later decision (see
+# docs/decisions/packager-responsibility-boundaries.md) that all
+# application-specific binary content, ML models included, bakes into a
+# Docker image via ordinary `COPY` rather than shipping as a separate
+# extracted asset. No `models/` (or `assets/`) directory is defined here.
+# The Manifest's `models` section is retained (all 16 top-level sections
+# are mandatory per §3.4) but its meaning is adapted: each declared model
+# records which Docker image/service it is baked into, plus a checksum the
+# Packaging Engine computes from the source model file(s) at packaging
+# time, before the Docker build — not a path inside the Release directory
+# tree. See release-manifest.schema.json#/properties/models.
+model_storage_policy: baked_into_docker_image
+
+# EXTRACTED — "4. Stage 4...md" §2.6, lines 2958-2973.
+path_rules:
+  - every manifest-declared path shall resolve inside the Release root
+  - all declared paths shall be relative, never absolute
+  - no external references outside the Release root are permitted
+  - "../ path traversal is prohibited"
+  - filenames shall be UTF-8
+  - absolute paths are prohibited except explicit deployment targets
+    (e.g. deployment.canonical_path, which names a Platform-side install
+    location, not a path inside the Release itself)
+
+# EXTRACTED — "4. Stage 4...md" §2.7, lines 2977-2983.
+extensibility:
+  additional_files_permitted: true
+  condition: >
+    Applications may add extra files/directories beyond this required
+    structure, provided they do not conflict with a reserved Release
+    Contract path. Reserved names shall not be repurposed.
+
+# EXTRACTED — "4. Stage 4...md" §2.8, lines 2985-3016. Minimum structural
+# checks the Release Validator performs before validating anything inside
+# the structure. Mirrored as RC-DIR-* rules in validation-rules.json.
+structural_validation_minimum:
+  - root directory naming is valid
+  - all mandatory directories exist
+  - all mandatory files exist
+  - no duplicate authoritative Release Manifest exists
+  - no duplicate lifecycle scripts for the same declared operation
+  - no missing checksum resources
+  - no invalid relative paths
+  - no forbidden absolute paths
+  - no path traversal
+  - no unknown/repurposed reserved names
+
+# EXTRACTED — "4. Stage 4...md" §2.11, lines 3050-3067. What the Platform
+# is entitled to assume, which is why this layout must stay deterministic.
+platform_assumptions:
+  - exactly one Release Manifest exists at a deterministic location
+  - lifecycle script locations are deterministic
+  - Docker image archive locations are deterministic
+  - checksum file location is deterministic
+  - documentation locations are deterministic
+  - compliance artifact location is deterministic
+  - the Platform shall not search the Release for alternative file
+    locations

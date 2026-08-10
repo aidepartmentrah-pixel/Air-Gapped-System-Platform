@@ -1,0 +1,2 @@
+[console_scripts]
+rah = rah_packager.cli:main
