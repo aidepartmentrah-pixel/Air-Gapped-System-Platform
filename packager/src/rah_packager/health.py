@@ -6,6 +6,11 @@ Mounted Repository (when RAH_REPO_PATH is set), and Output (when
 RAH_OUTPUT_PATH is set). Repo/output checks are optional because `rah
 health` must also succeed as a pure Runtime Test before any mount is
 configured at all.
+
+Also reports Claude API credential status — whether a key was found, where
+it came from, and (if found) whether it actually authenticates. Unlike
+Docker connectivity, an unconfigured or invalid key never fails `rah
+health` itself; it's reported, not fatal, same treatment as repo/output.
 """
 
 from __future__ import annotations
@@ -13,8 +18,10 @@ from __future__ import annotations
 import os
 import time
 
+from rah_packager.claude_client import validate_api_key
 from rah_packager.config import Config
 from rah_packager.docker_client import check_connectivity
+from rah_packager.errors import PackagerError
 
 
 def _check_repo_path(repo_path: str) -> dict:
@@ -42,12 +49,35 @@ def _check_output_path(output_path: str) -> dict:
     return {"path": output_path, "writable": round_tripped == payload}
 
 
+def _check_claude_credentials(config: Config) -> dict:
+    if not config.anthropic_api_key:
+        return {"configured": False, "source": None, "valid": None, "error": None}
+
+    try:
+        validate_api_key(config.anthropic_api_key)
+    except PackagerError as exc:
+        return {
+            "configured": True,
+            "source": config.anthropic_api_key_source,
+            "valid": False,
+            "error": exc.to_dict(),
+        }
+    return {
+        "configured": True,
+        "source": config.anthropic_api_key_source,
+        "valid": True,
+        "error": None,
+    }
+
+
 def run_health_check(config: Config) -> dict:
     """Raises DockerUnavailableError (via check_connectivity) if Docker is
     unreachable — that check is mandatory. Repo/output checks are best-effort
-    and included in the result only when their paths are configured.
+    and included in the result only when their paths are configured. Claude
+    credential status is always included but never fails the command —
+    same "report, don't gate" treatment as repo/output.
     """
-    report: dict = {"docker": check_connectivity()}
+    report: dict = {"docker": check_connectivity(), "claude": _check_claude_credentials(config)}
 
     if config.repo_path:
         report["mounted_repository"] = _check_repo_path(config.repo_path)

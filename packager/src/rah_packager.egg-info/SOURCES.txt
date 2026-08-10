@@ -1,5 +1,7 @@
 pyproject.toml
 src/rah_packager/__init__.py
+src/rah_packager/application_resources_inspection.py
+src/rah_packager/claude_client.py
 src/rah_packager/cli.py
 src/rah_packager/config.py
 src/rah_packager/docker_client.py
@@ -9,6 +11,7 @@ src/rah_packager/git_inspection.py
 src/rah_packager/health.py
 src/rah_packager/inspection.py
 src/rah_packager/logging_config.py
+src/rah_packager/packager_state_inspection.py
 src/rah_packager/project_state.py
 src/rah_packager/repository.py
 src/rah_packager/result.py
@@ -18,8 +21,11 @@ src/rah_packager.egg-info/dependency_links.txt
 src/rah_packager.egg-info/entry_points.txt
 src/rah_packager.egg-info/requires.txt
 src/rah_packager.egg-info/top_level.txt
+tests/test_application_resources_inspection.py
 tests/test_cli.py
+tests/test_docker_inspection.py
 tests/test_git_inspection.py
 tests/test_health.py
+tests/test_packager_state_inspection.py
 tests/test_project_state.py
 tests/test_result.py

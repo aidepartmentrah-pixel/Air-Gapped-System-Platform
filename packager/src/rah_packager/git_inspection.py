@@ -55,7 +55,13 @@ def inspect_git(repo_path: str | Path) -> dict:
     branch = _run_git_or_raise(path, "rev-parse", "--abbrev-ref", "HEAD")
     commit = _run_git_or_raise(path, "rev-parse", "HEAD")
     tag = _current_tag(path)
-    status = _run_git_or_raise(path, "status", "--porcelain")
+    # .rah/ is the Packager's own bookkeeping (project-state.json,
+    # engineering-answers.json, ...), not application source — excluded so
+    # writing into it (e.g. `rah init`, `rah prepare-answers`) doesn't
+    # immediately flip an otherwise-clean repo to "dirty" on the very next
+    # inspect. Real bug this fixes: P3 staleness fingerprints would never
+    # match right after `prepare-answers` wrote its own output file.
+    status = _run_git_or_raise(path, "status", "--porcelain", "--", ".", ":!.rah")
 
     return {
         "branch": branch,

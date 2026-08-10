@@ -18,8 +18,10 @@ from rah_packager.errors import PackagerError
 from rah_packager.health import run_health_check
 from rah_packager.inspection import inspect_project
 from rah_packager.logging_config import configure_logging
+from rah_packager.prepare_answers import prepare_answers
 from rah_packager.project_state import DEFAULT_INITIAL_VERSION, init_project
 from rah_packager.result import failure, ok, render
+from rah_packager.validate_answers import validate_answers
 
 
 @click.group()
@@ -97,6 +99,62 @@ def inspect(project_path: str) -> None:
         click.echo(render(failure("inspect", exc)))
         sys.exit(1)
     click.echo(render(ok("inspect", data)))
+
+
+@main.command(name="validate-answers")
+@click.option(
+    "--project",
+    "project_path",
+    required=True,
+    type=click.Path(),
+    help="Path to the application repository whose engineering answers to validate.",
+)
+@click.option(
+    "--answers",
+    "answers_path",
+    default=None,
+    type=click.Path(),
+    help="Path to engineering-answers.json (defaults to <project>/.rah/engineering-answers.json).",
+)
+def validate_answers_command(project_path: str, answers_path: str | None) -> None:
+    """Validate engineering answers: schema, consistency with the current
+    repository, and staleness — no Claude API call.
+    """
+    try:
+        data = validate_answers(project_path, answers_path)
+    except PackagerError as exc:
+        click.echo(render(failure("validate-answers", exc)))
+        sys.exit(1)
+    click.echo(render(ok("validate-answers", data)))
+
+
+@main.command(name="prepare-answers")
+@click.option(
+    "--project",
+    "project_path",
+    required=True,
+    type=click.Path(),
+    help="Path to the application repository to prepare engineering answers for.",
+)
+@click.option(
+    "--answers",
+    "answers_path",
+    default=None,
+    type=click.Path(),
+    help="Path to write engineering-answers.json to (defaults to <project>/.rah/engineering-answers.json).",
+)
+def prepare_answers_command(project_path: str, answers_path: str | None) -> None:
+    """Ask Claude to fill the engineering-judgment gaps `rah inspect` can't
+    determine on its own, and write `.rah/engineering-answers.json`. Always
+    overwrites an existing file.
+    """
+    config = Config.from_env()
+    try:
+        data = prepare_answers(project_path, config.anthropic_api_key, answers_path)
+    except PackagerError as exc:
+        click.echo(render(failure("prepare-answers", exc)))
+        sys.exit(1)
+    click.echo(render(ok("prepare-answers", data)))
 
 
 if __name__ == "__main__":

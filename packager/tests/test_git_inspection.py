@@ -54,6 +54,34 @@ def test_untracked_file_also_counts_as_dirty(tmp_path):
     assert facts["state"] == "dirty"
 
 
+def test_untracked_file_inside_rah_directory_does_not_count_as_dirty(tmp_path):
+    # Real regression: `rah init`/`rah prepare-answers` writing their own
+    # output into .rah/ must not immediately flip a clean repo dirty —
+    # otherwise P3 staleness fingerprints could never match right after
+    # `prepare-answers` writes its own answers file.
+    _init_repo_with_commit(tmp_path)
+    (tmp_path / ".rah").mkdir()
+    (tmp_path / ".rah" / "engineering-answers.json").write_text("{}")
+
+    facts = inspect_git(tmp_path)
+
+    assert facts["state"] == "clean"
+
+
+def test_modified_file_inside_rah_directory_does_not_count_as_dirty(tmp_path):
+    _init_repo_with_commit(tmp_path)
+    (tmp_path / ".rah").mkdir()
+    (tmp_path / ".rah" / "project-state.json").write_text('{"v": 1}')
+    _git(tmp_path, "add", ".rah/project-state.json")
+    _git(tmp_path, "commit", "--quiet", "-m", "add project state")
+
+    (tmp_path / ".rah" / "project-state.json").write_text('{"v": 2}')
+
+    facts = inspect_git(tmp_path)
+
+    assert facts["state"] == "clean"
+
+
 # --- Tag detection ---
 
 

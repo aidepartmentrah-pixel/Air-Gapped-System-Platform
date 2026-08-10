@@ -3,7 +3,9 @@
 ## Current Phase
 
 Period A, Packager track. Release Contract V1 is **FROZEN** (user-confirmed).
-Packager `P0`, `P1`, and `P2` done; `P3` is the active next slice.
+Packager `P0`, `P1`, `P2`, and `P3` are all done — `P3` (Claude Knowledge
+Bridge) finished with `rah prepare-answers` built, tested, and live-proven
+against the real Anthropic API. `P4` (Release Planning) is next.
 
 ## Architecture
 
@@ -25,12 +27,21 @@ Resources, Packager State — 26 new tests, 52/52 total pass, verified live
 against a real HCopilot clone **and** the real Indicator repo directly,
 proving the `ProjectInspectionResult` shape generalizes across two
 structurally different apps with zero per-app branching).
-**P3 (Claude Knowledge Bridge) is next** — unblocked, but needs a
-`docs/decisions/` design pass first: unlike P1/P2, there is no pre-drafted
-`engineering-answers.schema.json` or staleness mechanism anywhere in the
-frozen architecture; the architecture's own proposal doc flags this as
-one of the weaker areas from architecture review.
-See `docs/development/Period A — Independent Product Development;
+**P3 DONE** (Claude Knowledge Bridge). The design gap the architecture
+left open — no pre-drafted `engineering-answers.schema.json` or staleness
+mechanism, unlike P1/P2 — is closed:
+`docs/decisions/engineering-answers-and-staleness.md` written, schema
+derived field-by-field from the real frozen Release Manifest schema,
+`rah validate-answers` (schema + cross-consistency + two-anchor staleness
+check) and `rah prepare-answers` (real Claude API call, forced tool-use,
+three-tier suggestion pre-fill, unconditional-overwrite re-run behavior)
+both built and live-proven against a real repo with real Anthropic API
+spend — including a real new commit correctly detected as staleness after
+a real Claude-generated answer. 56 new tests across this slice (52 → 108
+total), 108/108 pass. Also built as a prerequisite: real Claude API credential handling
+(`Config.anthropic_api_key`, `rah health` reporting it, live-proven
+against the real Anthropic API with the engineer's real key). See
+`docs/development/Period A — Independent Product Development;
 Packager/2. Initial Slicing Task Table.md`.
 
 ## Period A — Platform
@@ -61,9 +72,10 @@ Status: NOT STARTED
    explicitly deferred by the user to later, not reopened speculatively.
 6. Begin Period A development (Packager and Platform, independently) —
    **IN PROGRESS**. Packager `P0`, `P1` (Project Initialization,
-   `rah init`), and `P2` (Repository Inspection, `rah inspect`) done and
-   tested; `P3` (Claude Knowledge Bridge) is next. Platform track not
-   started. See
+   `rah init`), `P2` (Repository Inspection, `rah inspect`), and `P3`
+   (Claude Knowledge Bridge, `rah prepare-answers` + `rah validate-answers`)
+   all done and tested. `P4` (Release Planning) is next. Platform track
+   not started. See
    `docs/development/Period A — Independent Product Development;
    Packager/2. Initial Slicing Task Table.md`.
 
@@ -125,17 +137,15 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-None hard-blocking Packager `P3`, but a design decision should come first:
-`docs/decisions/engineering-answers-and-staleness.md` (not yet written) —
-the shape of `engineering-answers.schema.json` and the staleness-detection
-mechanism (tying engineering answers to a Git commit / inspection
-fingerprint) need to be decided before `prepare-answers`/`validate-answers`
-implementation, the same way the architecture already decided P1's schema
-verbatim but deliberately left this one open.
+None. Packager `P0`–`P3` are all done. `P4` (Release Planning) has no
+open design gap — see the Master Development Matrix in the Slicing Task
+Table for its dependencies.
 
 ## Next Major Gate
 
-Packager `P3` (Claude Knowledge Bridge) complete and tested.
+Packager `P4` (Release Planning) — the next slice in the matrix, building
+on the now-complete `P1`–`P3` foundation (Project Version State,
+`ProjectInspectionResult`, and Engineering Answers).
 
 ## Future Design Tasks (not yet started)
 
@@ -162,6 +172,10 @@ Packager `P3` (Claude Knowledge Bridge) complete and tested.
 - `docs/development/1. Development Strategy and Engineering Rules.md` — the
   17 governing development rules (not yet renamed to `00-development-rules.md`;
   content was preserved as-is during migration, see bootstrap report).
+- `docs/decisions/engineering-answers-and-staleness.md` — the P3 design the
+  frozen architecture left open: `engineering-answers.schema.json` derived
+  field-by-field from the real Release Manifest schema, and the two-anchor
+  (Git commit + inspection fingerprint) staleness mechanism.
 - `docs/decisions/packager-responsibility-boundaries.md` — who actually does
   what between Docker, Claude (at app-dev time vs. packaging time), and the
   Packager's own deterministic code; the "everything bakes into Docker

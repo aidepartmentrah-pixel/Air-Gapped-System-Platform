@@ -158,3 +158,146 @@ def test_init_then_inspect_reports_packager_state(tmp_path):
         "next_version": "1.0.0",
         "release_history": [],
     }
+
+
+# --- `rah validate-answers` (P3 subtask 3, no Claude API call) ---
+
+
+def test_validate_answers_reports_missing_file(tmp_path):
+    _git_init_with_commit(tmp_path)
+
+    runner = CliRunner()
+    result, envelope = _invoke_json(runner, ["validate-answers", "--project", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit), "unexpected crash, not a controlled exit"
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "PKG-ENGINEERING-ANSWERS-NOT-FOUND"
+
+
+def test_validate_answers_accepts_a_valid_matching_file(tmp_path):
+    import json as _json
+
+    from rah_packager.engineering_answers import compute_inspection_fingerprint
+    from rah_packager.inspection import inspect_project
+
+    _git_init_with_commit(tmp_path)
+    inspection_result = inspect_project(tmp_path)
+
+    answers = {
+        "schema_version": "1.0",
+        "based_on": {
+            "git_commit": inspection_result["git"]["commit"],
+            "inspection_fingerprint": compute_inspection_fingerprint(inspection_result),
+        },
+        "application": {"description": "A test application."},
+        "compatibility": {"minimum_rah_oip_version": "1.0", "supported_architectures": ["amd64"]},
+        "deployment": {"entrypoints": {}, "supported_operations": {"fresh_install": True}},
+        "configuration": {"inputs": []},
+        "database": {"required": False},
+        "persistent_state": {"preserve_during_update": []},
+        "offline_requirements": {
+            "public_internet_required": False,
+            "public_registry_required": False,
+            "public_cdn_required": False,
+            "online_model_registry_required": False,
+        },
+        "models": {"required": False},
+        "client": {"preparation_required": False, "https_required": False},
+        "verification": {"required_checks": []},
+        # README.md is the only doc file `_git_init_with_commit` created —
+        # pointing at anything else here would trip the consistency check.
+        "documentation": {
+            "release_notes": "README.md",
+            "installation": "README.md",
+            "update": "README.md",
+            "recovery": "README.md",
+            "known_issues": "README.md",
+        },
+    }
+    answers_dir = tmp_path / ".rah"
+    answers_dir.mkdir()
+    (answers_dir / "engineering-answers.json").write_text(_json.dumps(answers))
+
+    runner = CliRunner()
+    result, envelope = _invoke_json(runner, ["validate-answers", "--project", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert envelope["ok"] is True
+    assert envelope["result"]["valid"] is True
+
+
+# --- `rah prepare-answers` (P3 subtask 2, real Claude API call — mocked here) ---
+
+
+def test_prepare_answers_reports_missing_api_key(tmp_path, monkeypatch):
+    _git_init_with_commit(tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("RAH_CREDENTIALS_FILE", str(tmp_path / "nonexistent-credentials.env"))
+
+    runner = CliRunner()
+    result, envelope = _invoke_json(runner, ["prepare-answers", "--project", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit), "unexpected crash, not a controlled exit"
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "PKG-CLAUDE-API-KEY-MISSING"
+
+
+def test_prepare_answers_command_writes_valid_answers(tmp_path, monkeypatch):
+    from rah_packager import prepare_answers as prepare_answers_module
+
+    _git_init_with_commit(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+
+    claude_answer = {
+        "application": {"description": "A test application."},
+        "compatibility": {"minimum_rah_oip_version": "1.0", "supported_architectures": ["amd64"]},
+        "deployment": {"entrypoints": {}, "supported_operations": {"fresh_install": True}},
+        "configuration": {"inputs": []},
+        "database": {"required": False},
+        "persistent_state": {"preserve_during_update": []},
+        "offline_requirements": {
+            "public_internet_required": False,
+            "public_registry_required": False,
+            "public_cdn_required": False,
+            "online_model_registry_required": False,
+        },
+        "models": {"required": False},
+        "client": {"preparation_required": False, "https_required": False},
+        "verification": {"required_checks": []},
+        # README.md is the only doc file `_git_init_with_commit` created.
+        "documentation": {
+            "release_notes": "README.md",
+            "installation": "README.md",
+            "update": "README.md",
+            "recovery": "README.md",
+            "known_issues": "README.md",
+        },
+    }
+
+    class _FakeContentBlock:
+        type = "tool_use"
+        input = claude_answer
+
+    class _FakeResponse:
+        stop_reason = "tool_use"
+        content = [_FakeContentBlock()]
+
+    class _FakeMessages:
+        def create(self, **kwargs):
+            return _FakeResponse()
+
+    class _FakeClient:
+        def __init__(self, api_key):
+            self.messages = _FakeMessages()
+
+    monkeypatch.setattr(prepare_answers_module.anthropic, "Anthropic", _FakeClient)
+
+    runner = CliRunner()
+    result, envelope = _invoke_json(runner, ["prepare-answers", "--project", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert envelope["ok"] is True
+    assert envelope["result"]["schema_valid"] is True
+    assert (tmp_path / ".rah" / "engineering-answers.json").exists()
