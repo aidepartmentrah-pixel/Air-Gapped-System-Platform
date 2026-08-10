@@ -296,6 +296,23 @@ qualification proof against a real offline VM.
     needed a code now; which category prefix it should carry is a
     namespace-design decision, not something to guess mid-slice.
 
+- **Period C must inherit the mocked-vs-live testing discipline already
+  proven in `P3`, not silently drop it.** `packager/tests/test_claude_client.py`
+  mocks the real `anthropic.Anthropic` client via `monkeypatch` for every
+  automated test — real Anthropic API spend only happened once,
+  deliberately, for the actual `rah prepare-answers` live-proof (~$0.54
+  total). That split is what keeps the automated suite fast, free, and
+  deterministic while still getting a genuine live proof once. When
+  Jenkins automates this pipeline, someone has to make sure the CI
+  pipeline keeps that same split — mocked in the routine automated run,
+  real API calls only where a genuine live-proof gate actually requires
+  it. If that boundary gets blurred during automation, a trivial
+  one-time cost becomes a recurring per-build cost instead, and the
+  suite may also become flaky (network/rate-limit dependent) where it
+  currently isn't. Not a problem today — `docs/development/Period C —
+  Jenkins Automation/1. Initial GPT Proposal.md` is still empty, Period C
+  hasn't started. Worth a checklist item once it does.
+
 ## Related References
 
 - `docs/development/SESSION_START.md` — read automatically every session
