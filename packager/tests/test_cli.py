@@ -1,9 +1,13 @@
 import json
 import subprocess
+from pathlib import Path
 
+import docker
 from click.testing import CliRunner
 
 from rah_packager.cli import main
+
+FIXTURES = Path(__file__).parent / "fixtures" / "projects"
 
 
 def _invoke_json(runner: CliRunner, args: list[str], env: dict | None = None) -> dict:
@@ -301,3 +305,130 @@ def test_prepare_answers_command_writes_valid_answers(tmp_path, monkeypatch):
     assert envelope["ok"] is True
     assert envelope["result"]["schema_valid"] is True
     assert (tmp_path / ".rah" / "engineering-answers.json").exists()
+
+
+# --- `rah plan` (P4, no Claude API call) ---
+
+
+def test_plan_reports_project_not_initialized(tmp_path):
+    _git_init_with_commit(tmp_path)
+
+    runner = CliRunner()
+    result, envelope = _invoke_json(runner, ["plan", "--project", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit), "unexpected crash, not a controlled exit"
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "PKG-PLAN-PROJECT-NOT-INITIALIZED"
+
+
+def test_plan_command_returns_valid_json_envelope(tmp_path):
+    import json as _json
+
+    from rah_packager.engineering_answers import compute_inspection_fingerprint
+    from rah_packager.inspection import inspect_project
+
+    _git_init_with_commit(tmp_path)
+    runner = CliRunner()
+    runner.invoke(
+        main, ["init", "--project", str(tmp_path), "--name", "HCAT", "--slug", "hcat"]
+    )
+
+    inspection_result = inspect_project(tmp_path)
+    answers = {
+        "schema_version": "1.0",
+        "based_on": {
+            "git_commit": inspection_result["git"]["commit"],
+            "inspection_fingerprint": compute_inspection_fingerprint(inspection_result),
+        },
+        "application": {"description": "A test application."},
+        "compatibility": {"minimum_rah_oip_version": "1.0", "supported_architectures": ["amd64"]},
+        "deployment": {"entrypoints": {}, "supported_operations": {"fresh_install": True}},
+        "configuration": {"inputs": []},
+        "database": {"required": False},
+        "persistent_state": {"preserve_during_update": []},
+        "offline_requirements": {
+            "public_internet_required": False,
+            "public_registry_required": False,
+            "public_cdn_required": False,
+            "online_model_registry_required": False,
+        },
+        "models": {"required": False},
+        "client": {"preparation_required": False, "https_required": False},
+        "verification": {"required_checks": []},
+        "documentation": {
+            "release_notes": "README.md",
+            "installation": "README.md",
+            "update": "README.md",
+            "recovery": "README.md",
+            "known_issues": "README.md",
+        },
+    }
+    answers_dir = tmp_path / ".rah"
+    (answers_dir / "engineering-answers.json").write_text(_json.dumps(answers))
+
+    result, envelope = _invoke_json(runner, ["plan", "--project", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert envelope["ok"] is True
+    assert envelope["result"]["proposed_version"] == "1.0.0"
+    assert envelope["result"]["current_release"] is None
+    assert envelope["result"]["may_proceed"] is True
+
+
+# --- `rah build` (P5, real Docker build against the real Engine) ---
+
+
+def test_build_command_returns_valid_json_envelope(tmp_path):
+    client = docker.from_env()
+    slug = "pytest-p5-cli"
+    try:
+        runner = CliRunner()
+        result, envelope = _invoke_json(
+            runner,
+            [
+                "build",
+                "--project",
+                str(FIXTURES / "trivial-one-container"),
+                "--output",
+                str(tmp_path / "workspace"),
+                "--slug",
+                slug,
+                "--version",
+                "0.0.1",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert envelope["ok"] is True
+        assert envelope["command"] == "build"
+        assert envelope["result"]["images"][0]["built"] is True
+        assert (tmp_path / "workspace" / "docker-images").is_dir()
+    finally:
+        try:
+            client.images.remove(f"rah-{slug}-app:0.0.1", force=True)
+        except docker.errors.ImageNotFound:
+            pass
+
+
+def test_build_command_reports_structured_error_for_broken_dockerfile(tmp_path):
+    runner = CliRunner()
+    result, envelope = _invoke_json(
+        runner,
+        [
+            "build",
+            "--project",
+            str(FIXTURES / "broken-dockerfile"),
+            "--output",
+            str(tmp_path / "workspace"),
+            "--slug",
+            "pytest-p5-cli",
+            "--version",
+            "0.0.1",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit), "unexpected crash, not a controlled exit"
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "PKG-DOCKER-BUILD-FAILED"

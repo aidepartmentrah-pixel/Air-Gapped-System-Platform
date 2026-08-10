@@ -14,12 +14,14 @@ import click
 
 from rah_packager import __version__
 from rah_packager.config import Config
+from rah_packager.docker_build import build_release_images
 from rah_packager.errors import PackagerError
 from rah_packager.health import run_health_check
 from rah_packager.inspection import inspect_project
 from rah_packager.logging_config import configure_logging
 from rah_packager.prepare_answers import prepare_answers
 from rah_packager.project_state import DEFAULT_INITIAL_VERSION, init_project
+from rah_packager.release_plan import prepare_plan
 from rah_packager.result import failure, ok, render
 from rah_packager.validate_answers import validate_answers
 
@@ -155,6 +157,70 @@ def prepare_answers_command(project_path: str, answers_path: str | None) -> None
         click.echo(render(failure("prepare-answers", exc)))
         sys.exit(1)
     click.echo(render(ok("prepare-answers", data)))
+
+
+@main.command(name="plan")
+@click.option(
+    "--project",
+    "project_path",
+    required=True,
+    type=click.Path(),
+    help="Path to the application repository to plan a Release for.",
+)
+@click.option(
+    "--increment",
+    "increment",
+    default="patch",
+    type=click.Choice(["patch", "minor", "major"]),
+    show_default=True,
+    help="Version increment to propose (ignored before the first Release).",
+)
+@click.option(
+    "--answers",
+    "answers_path",
+    default=None,
+    type=click.Path(),
+    help="Path to engineering-answers.json (defaults to <project>/.rah/engineering-answers.json).",
+)
+def plan(project_path: str, increment: str, answers_path: str | None) -> None:
+    """Preview exactly what Release would be built, without building or
+    finalizing anything.
+    """
+    try:
+        data = prepare_plan(project_path, increment, answers_path)
+    except PackagerError as exc:
+        click.echo(render(failure("plan", exc)))
+        sys.exit(1)
+    click.echo(render(ok("plan", data)))
+
+
+@main.command(name="build")
+@click.option(
+    "--project",
+    "project_path",
+    required=True,
+    type=click.Path(),
+    help="Path to the application repository whose Compose-declared images to build.",
+)
+@click.option(
+    "--output",
+    "output_dir",
+    required=True,
+    type=click.Path(),
+    help="Temporary build workspace to export image archives into.",
+)
+@click.option("--slug", "application_slug", required=True, help="Application slug for image naming.")
+@click.option("--version", "version", required=True, help="Version to tag built images with.")
+def build(project_path: str, output_dir: str, application_slug: str, version: str) -> None:
+    """Build every Compose-declared service image, tag it, and export it to
+    a temporary build workspace. Does not finalize a Release.
+    """
+    try:
+        data = build_release_images(project_path, application_slug, version, output_dir)
+    except PackagerError as exc:
+        click.echo(render(failure("build", exc)))
+        sys.exit(1)
+    click.echo(render(ok("build", data)))
 
 
 if __name__ == "__main__":

@@ -303,6 +303,91 @@ class EngineeringAnswersStaleError(PackagerError):
         )
 
 
+class PlanInvalidIncrementError(PackagerError):
+    """`--increment` was not one of `patch`/`minor`/`major`."""
+
+    def __init__(self, increment: str):
+        super().__init__(
+            code="PKG-INPUT-INVALID-INCREMENT",
+            message=f"Invalid version increment {increment!r} — must be patch, minor, or major.",
+        )
+
+
+class PlanProjectNotInitializedError(PackagerError):
+    """`rah plan` needs a Project Version State to propose a next version
+    against — distinct from P2's `packager_state: null`, which is a valid
+    inspection result, not an error, because inspection doesn't need one.
+    """
+
+    def __init__(self, path: str):
+        super().__init__(
+            code="PKG-PLAN-PROJECT-NOT-INITIALIZED",
+            message=f"Project has not been initialized (run `rah init` first): {path}",
+        )
+
+
+class PlanDirtySourceError(PackagerError):
+    """Contract convention (release-manifest schema, `source.source_dirty`):
+    a finalized Release should normally require clean source, and dirty
+    source should be rejected unless an explicit exceptional policy
+    permits it. V1 has no override policy — always a hard rejection.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(
+            code="PKG-PLAN-DIRTY-SOURCE-REJECTED",
+            message=f"Cannot plan a Release against a dirty repository: {detail}",
+        )
+
+
+class PlanDuplicateVersionError(PackagerError):
+    """The proposed version already exists in `release_history` — the same
+    version can never be proposed twice (Releases are additive, never
+    overwritten — see docs/decisions/packager-responsibility-boundaries.md).
+    """
+
+    def __init__(self, version: str):
+        super().__init__(
+            code="PKG-PLAN-VERSION-ALREADY-RELEASED",
+            message=f"Version {version} already exists in this project's release history.",
+        )
+
+
+class DockerBuildFailedError(PackagerError):
+    """A declared service's image failed to build — broken Dockerfile,
+    missing build context, or any other real `docker build` failure.
+    Carries the failing service name and a tail of the real build log so
+    the failure is diagnosable from the structured error alone.
+    """
+
+    def __init__(self, service: str, detail: str, log_tail: list[str]):
+        super().__init__(
+            code="PKG-DOCKER-BUILD-FAILED",
+            message=f"Building image for service {service!r} failed: {detail}",
+        )
+        self.service = service
+        self.log_tail = log_tail
+
+    def to_dict(self) -> dict:
+        result = super().to_dict()
+        result["service"] = self.service
+        result["log_tail"] = self.log_tail
+        return result
+
+
+class DockerImageExportError(PackagerError):
+    """A successfully built image could not be exported/saved to a `.tar`
+    archive — disk full, permissions, etc, at the filesystem level.
+    """
+
+    def __init__(self, service: str, detail: str):
+        super().__init__(
+            code="PKG-DOCKER-IMAGE-EXPORT-FAILED",
+            message=f"Exporting image for service {service!r} failed: {detail}",
+        )
+        self.service = service
+
+
 class EngineeringAnswersWriteError(PackagerError):
     """Writing or atomically replacing `.rah/engineering-answers.json`
     failed at the filesystem level (disk full, permissions, etc).

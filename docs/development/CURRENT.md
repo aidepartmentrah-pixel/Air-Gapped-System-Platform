@@ -3,9 +3,10 @@
 ## Current Phase
 
 Period A, Packager track. Release Contract V1 is **FROZEN** (user-confirmed).
-Packager `P0`, `P1`, `P2`, and `P3` are all done — `P3` (Claude Knowledge
-Bridge) finished with `rah prepare-answers` built, tested, and live-proven
-against the real Anthropic API. `P4` (Release Planning) is next.
+Packager `P0`–`P5` are all done — `P5` (Docker Build and Artifact
+Preparation) finished with `rah build` built, tested, and live-proven
+with real builds against both real acceptance apps (HCopilot and
+Indicator). `P6` (Release Construction) is next.
 
 ## Architecture
 
@@ -40,9 +41,43 @@ spend — including a real new commit correctly detected as staleness after
 a real Claude-generated answer. 56 new tests across this slice (52 → 108
 total), 108/108 pass. Also built as a prerequisite: real Claude API credential handling
 (`Config.anthropic_api_key`, `rah health` reporting it, live-proven
-against the real Anthropic API with the engineer's real key). See
-`docs/development/Period A — Independent Product Development;
-Packager/2. Initial Slicing Task Table.md`.
+against the real Anthropic API with the engineer's real key).
+**P4 DONE** (Release Planning). `rah plan` previews exactly what Release
+would be built — application, proposed version, output directory name,
+expected Docker images/release directories, required scripts/configuration
+— without writing anything, by combining P1's Project Version State, P2's
+inspection, and P3's validated engineering answers. No new persisted
+artifact, so no new frozen schema, unlike P1/P3. Four blocking conditions,
+each a real structured error: project not initialized, dirty Git state
+(user-confirmed: no override policy in V1), duplicate version, and
+missing/invalid/stale engineering answers (reuses `validate_answers()`
+directly rather than re-implementing that logic). 14 new tests, 122/122
+total pass, live-proven against the real built container including the
+dirty-state rejection.
+**P5 DONE** (Docker Build and Artifact Preparation). `rah build` builds
+every Compose service that declares its own `build:` context, tags it
+(`rah-{application_slug}-{service}:{version}`, matching the architecture's
+own manifest example verbatim), exports it to a `.tar` archive, and
+reports a per-service build inventory — the first slice doing real,
+expensive external operations, not just reading/parsing. Deliberately
+scoped down to "internal capabilities" per the spec's own wording: no
+dependency on Project Version State (`application_slug`/`version` are
+caller-supplied), and only services with their own `build:` key are
+built — a prebuilt `image:` reference is reported but not built/exported
+(out of this slice's scope). Two new errors: `PKG-DOCKER-BUILD-FAILED`
+(carries the failing service + real build-log tail) and
+`PKG-DOCKER-IMAGE-EXPORT-FAILED`. Fails fast, leaving a real partial
+build workspace on failure — never treated as a finalized Release. 7 new
+tests, 129/129 total pass, all against the real Docker Engine (no mocks).
+Live-proven against the real built container: a trivial fixture end to
+end including a real `docker load` round-trip on the exported archive,
+and real, full builds against **both** required acceptance apps —
+HCopilot (explicit `context`/`dockerfile` Compose form, real
+apt/pip-heavy backend build, ~496 MB archive) and Indicator (shorthand
+`build: ./service` Compose form, ~144 MB archive) — both succeeded for
+real, proofs cleaned up afterward. See `docs/development/Period A —
+Independent Product Development; Packager/2. Initial Slicing Task
+Table.md`.
 
 ## Period A — Platform
 
@@ -72,10 +107,11 @@ Status: NOT STARTED
    explicitly deferred by the user to later, not reopened speculatively.
 6. Begin Period A development (Packager and Platform, independently) —
    **IN PROGRESS**. Packager `P0`, `P1` (Project Initialization,
-   `rah init`), `P2` (Repository Inspection, `rah inspect`), and `P3`
-   (Claude Knowledge Bridge, `rah prepare-answers` + `rah validate-answers`)
-   all done and tested. `P4` (Release Planning) is next. Platform track
-   not started. See
+   `rah init`), `P2` (Repository Inspection, `rah inspect`), `P3`
+   (Claude Knowledge Bridge, `rah prepare-answers` + `rah validate-answers`),
+   `P4` (Release Planning, `rah plan`), and `P5` (Docker Build and
+   Artifact Preparation, `rah build`) all done and tested. `P6` (Release
+   Construction) is next. Platform track not started. See
    `docs/development/Period A — Independent Product Development;
    Packager/2. Initial Slicing Task Table.md`.
 
@@ -137,15 +173,17 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-None. Packager `P0`–`P3` are all done. `P4` (Release Planning) has no
-open design gap — see the Master Development Matrix in the Slicing Task
-Table for its dependencies.
+None. Packager `P0`–`P5` are all done. `P6` (Release Construction) has no
+open design gap — the manifest/layout it constructs against already
+exist as real, frozen files in `contracts/1.0/`. See the Master
+Development Matrix in the Slicing Task Table for its dependencies.
 
 ## Next Major Gate
 
-Packager `P4` (Release Planning) — the next slice in the matrix, building
-on the now-complete `P1`–`P3` foundation (Project Version State,
-`ProjectInspectionResult`, and Engineering Answers).
+Packager `P6` (Release Construction) — "where previous pieces finally
+combine": assembling a complete, finalized, immutable Release directory
+per `release-layout.yaml`, using P1's state, P3's answers, P4's plan, and
+P5's built/exported images together for the first time.
 
 ## Future Design Tasks (not yet started)
 
@@ -158,6 +196,30 @@ on the now-complete `P1`–`P3` foundation (Project Version State,
   `docs/development/Period A — Independent Product Development;
   Packager/1. Initial GPT Proposal.md` (P5, where `PKG-DOCKER-*` is
   referenced as if it already exists).
+
+  Concrete gaps observed while reading the implementation so far, worth
+  folding into that eventual discussion rather than fixing piecemeal now:
+  - `errors.py`'s `DockerUnavailableError` uses code
+    `PKG-RUNTIME-DOCKER-UNAVAILABLE`. `RUNTIME` is not one of the 11
+    categories the architecture actually names (`4.6. Stage 4 —
+    Packaging Engine Specification.md` §9: `PKG-INPUT`, `PKG-PROJECT`,
+    `PKG-GIT`, `PKG-CLAUDE`, `PKG-DOCKER`, `PKG-MANIFEST`,
+    `PKG-CONTRACT`, `PKG-ARTIFACT`, `PKG-FILESYSTEM`, `PKG-FINALIZE`,
+    `PKG-INTERNAL`). Every other implemented error code does use one of
+    the 11. This one looks like an un-reconciled outlier from P0, not a
+    deliberate choice — worth deciding whether it becomes `PKG-DOCKER-*`
+    or `PKG-INTERNAL-*` when the namespace is actually designed.
+  - The architecture's §9 error object example has 7 fields (`code`,
+    `category`, `stage`, `message`, `details`, `retryable`,
+    `log_reference`). `PackagerError.to_dict()` currently only emits
+    `{code, message}` — `category`/`stage`/`details`/`retryable`/
+    `log_reference` are all unimplemented. Fine for now since nothing
+    downstream needs them yet, but the richer shape was designed and
+    never built, not rejected.
+  - §8's CLI exit-code table (`2`–`10`, one per failure category) is not
+    wired into `cli.py` — every command currently calls `sys.exit(1)` on
+    any `PackagerError`, regardless of category. Same status as above:
+    designed, not implemented, not yet needed by anything.
 
 ## Related References
 
