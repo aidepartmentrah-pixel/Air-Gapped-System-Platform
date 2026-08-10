@@ -3,7 +3,7 @@
 ## Current Phase
 
 Period A, Packager track. Release Contract V1 is **FROZEN** (user-confirmed).
-Packager `P0` done; `P1` is the active next slice.
+Packager `P0`, `P1`, and `P2` done; `P3` is the active next slice.
 
 ## Architecture
 
@@ -17,7 +17,19 @@ speculative redesign.
 
 Status: **P0 DONE** (runtime/CLI foundation — `packager/`, 14/14 tests
 pass, all required proofs verified live against the real container).
-**P1 (Project Initialization) is next** — unblocked, Contract V1 is frozen.
+**P1 DONE** (`rah init` / Project Version State — 12 new tests, 26/26
+total pass, all required proofs verified live against the real built
+container, including a real run against a clone of HCopilot).
+**P2 DONE** (`rah inspect` — all 4 categories: Git, Docker, Application
+Resources, Packager State — 26 new tests, 52/52 total pass, verified live
+against a real HCopilot clone **and** the real Indicator repo directly,
+proving the `ProjectInspectionResult` shape generalizes across two
+structurally different apps with zero per-app branching).
+**P3 (Claude Knowledge Bridge) is next** — unblocked, but needs a
+`docs/decisions/` design pass first: unlike P1/P2, there is no pre-drafted
+`engineering-answers.schema.json` or staleness mechanism anywhere in the
+frozen architecture; the architecture's own proposal doc flags this as
+one of the weaker areas from architecture review.
 See `docs/development/Period A — Independent Product Development;
 Packager/2. Initial Slicing Task Table.md`.
 
@@ -48,8 +60,10 @@ Status: NOT STARTED
    the release Contract V1. It is good. We will build on it."* Any edit is
    explicitly deferred by the user to later, not reopened speculatively.
 6. Begin Period A development (Packager and Platform, independently) —
-   **IN PROGRESS**. Packager `P0` done and tested; `P1` (Project
-   Initialization, `rah init`) is next. Platform track not started. See
+   **IN PROGRESS**. Packager `P0`, `P1` (Project Initialization,
+   `rah init`), and `P2` (Repository Inspection, `rah inspect`) done and
+   tested; `P3` (Claude Knowledge Bridge) is next. Platform track not
+   started. See
    `docs/development/Period A — Independent Product Development;
    Packager/2. Initial Slicing Task Table.md`.
 
@@ -111,11 +125,17 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-None for Packager `P1`. Release Contract V1 is frozen.
+None hard-blocking Packager `P3`, but a design decision should come first:
+`docs/decisions/engineering-answers-and-staleness.md` (not yet written) —
+the shape of `engineering-answers.schema.json` and the staleness-detection
+mechanism (tying engineering answers to a Git commit / inspection
+fingerprint) need to be decided before `prepare-answers`/`validate-answers`
+implementation, the same way the architecture already decided P1's schema
+verbatim but deliberately left this one open.
 
 ## Next Major Gate
 
-Packager `P1` (Project Initialization — `rah init`) complete and tested.
+Packager `P3` (Claude Knowledge Bridge) complete and tested.
 
 ## Future Design Tasks (not yet started)
 
@@ -131,6 +151,10 @@ Packager `P1` (Project Initialization — `rah init`) complete and tested.
 
 ## Related References
 
+- `docs/development/SESSION_START.md` — read automatically every session
+  via the repo-root `CLAUDE.md`. Phase-agnostic bootstrap: what to read,
+  how the docs are organized, working discipline. Don't add project status
+  there — it belongs here in `CURRENT.md`.
 - `docs/development/repository-bootstrap-report.md` — how this repository was assembled.
 - `docs/infrastructure-reference/golden-baseline.md` — the RAH Infrastructure
   Golden Baseline (Hyper-V snapshot `GoldenSnapshot-WithRAHOIP`), the

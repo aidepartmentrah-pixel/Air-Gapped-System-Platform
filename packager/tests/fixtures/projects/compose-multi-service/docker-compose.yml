@@ -1,0 +1,9 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+  frontend:
+    build: ./frontend
+  database:
+    image: postgres:16
