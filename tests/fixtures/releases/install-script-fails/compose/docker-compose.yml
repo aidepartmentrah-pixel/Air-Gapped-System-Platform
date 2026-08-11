@@ -1,0 +1,3 @@
+services:
+  backend:
+    image: script-fail-app-backend:1.0.0

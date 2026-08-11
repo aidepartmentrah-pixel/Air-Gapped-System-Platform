@@ -31,7 +31,7 @@ from rah_platform.models import deployment_configuration, deployments, releases
 # --- Port availability ---
 
 
-def _port_is_available(port: int, host: str = "0.0.0.0") -> bool:
+def port_is_available(port: int, host: str = "0.0.0.0") -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -49,7 +49,7 @@ def suggest_available_ports(
     for port in candidates:
         if len(suggestions) >= count:
             break
-        if minimum <= port <= maximum and _port_is_available(port):
+        if minimum <= port <= maximum and port_is_available(port):
             suggestions.append(port)
     return {"suggestions": suggestions, "provisional": True}
 
@@ -303,7 +303,5 @@ def validate_deployment_inputs(engine, release_id: str, configuration: dict) -> 
         type_error = _validate_type(value, decl["type"])
         if type_error:
             errors.append({"code": "PLT-INPUT-003", "key": key, "message": f"Invalid value for '{key}': {type_error}."})
-        if decl["type"] == "port" and type_error is None and not _port_is_available(value):
-            errors.append({"code": "PLT-CONFIG-004", "key": key, "message": f"Port {value} is not currently available."})
 
     return {"valid": not errors, "errors": errors}

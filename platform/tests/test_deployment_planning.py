@@ -75,7 +75,7 @@ def test_port_suggestion_remains_provisional_not_a_reservation():
         occupied.bind(("0.0.0.0", suggested_port))
         occupied.listen(1)
 
-        assert deployment_planning._port_is_available(suggested_port) is False
+        assert deployment_planning.port_is_available(suggested_port) is False
 
 
 # --- Missing Required Input ---

@@ -282,3 +282,84 @@ class ReleaseBelongsToAnotherApplicationError(PlatformError):
     category = "RELEASE"
     retryable = False
     http_status = 422
+
+
+# --- PL6: Fresh Installation Execution ---
+
+
+class ApplicationAlreadyInstalledError(PlatformError):
+    code = "PLT-APPLICATION-002"
+    category = "APPLICATION"
+    retryable = False
+    http_status = 409
+
+
+class ReleaseNotAvailableError(PlatformError):
+    code = "PLT-RELEASE-002"
+    category = "RELEASE"
+    retryable = False
+    http_status = 422
+
+
+class FreshInstallUnsupportedError(PlatformError):
+    code = "PLT-TRANSITION-001"
+    category = "TRANSITION"
+    retryable = False
+    http_status = 422
+
+
+class DeploymentConfigurationInvalidError(PlatformError):
+    code = "PLT-INSTALL-002"
+    category = "INSTALL"
+    retryable = False
+    http_status = 422
+
+
+class PortUnavailableError(PlatformError):
+    code = "PLT-CONFIG-004"
+    category = "CONFIG"
+    retryable = True
+    http_status = 422
+
+
+class InstallationScriptMissingError(PlatformError):
+    code = "PLT-INSTALL-004"
+    category = "INSTALL"
+    retryable = False
+    http_status = 422
+
+
+class InstallationScriptFailedError(PlatformError):
+    code = "PLT-INSTALL-005"
+    category = "INSTALL"
+    retryable = True
+    http_status = 422
+
+
+class ScriptTimedOutError(PlatformError):
+    code = "PLT-SCRIPT-003"
+    category = "SCRIPT"
+    retryable = True
+    http_status = 422
+
+
+class MandatoryVerificationFailedError(PlatformError):
+    code = "PLT-INSTALL-006"
+    category = "INSTALL"
+    retryable = True
+    http_status = 422
+
+
+class ActiveDeploymentCommitFailedError(PlatformError):
+    """§8.15: "A technically successful host operation could not be
+    committed safely to Platform state. Such a condition requires
+    reconciliation." The script and verification both succeeded — the
+    host really did change — but the Platform couldn't safely record it.
+    Never silently claim success here; `details.reconciliation_required`
+    is always `True`.
+    """
+
+    code = "PLT-INSTALL-007"
+    category = "INSTALL"
+    retryable = False
+    http_status = 500

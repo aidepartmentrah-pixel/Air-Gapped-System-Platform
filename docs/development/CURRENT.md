@@ -241,8 +241,27 @@ needed them — no behavior change, full suite green before and after.
 113/113 tests pass total, all 10 required `PL5` proofs verified live
 against the real running Compose container, including a real update plan
 showing real preserved configuration and an explicit mandatory-backup
-requirement. `PL6` (Fresh Installation Execution) is next — the first
-slice that actually changes host/Docker state. See
+requirement. **`PL6` (Fresh Installation Execution) is DONE** — the
+Platform's first operation that actually changes host/Docker state.
+`installation.py`: synchronous request/lock validation, then real
+execution in a background thread (real `202` → poll → `SUCCEEDED`/
+`FAILED`, matching §5.3). Real Docker images replaced the placeholder
+tars in the Golden Fixtures; the backend image needed the real `docker`/
+`docker compose` CLI added (a real infrastructure gap found and fixed,
+not worked around — the Platform invokes Manifest-declared scripts
+rather than reimplementing their behavior, per §12.6). Minimal
+verification is real Docker container inspection only — the Release's
+own `verify_deployment.sh` stays `PL7`'s job. A real cross-slice bug was
+found and fixed: `PL5`'s `validate_deployment_inputs` had grown a live
+port check that duplicated `PL6`'s own dedicated recheck and produced
+the wrong error for the Port Conflict test — removed from `PL5`, kept
+only in `PL6` where architecture actually places it (§3.7). 122/122
+tests pass total, all 8 required `PL6` proofs verified live against the
+real running Compose container — including confirming the installed
+container from *outside* the backend container, on the real host's own
+Docker Engine, and `PL4`'s action logic correctly flipping to reflect a
+*real* installation for the first time, not seeded state. `PL7`
+(Verification and Host Reconciliation) is next. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -283,9 +302,9 @@ Status: NOT STARTED
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
    Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
    Discovery), `PL3` (Release Import and Registry), `PL4` (Application
-   State and Action Intelligence), and `PL5` (Deployment Planning and
-   Configuration) done and tested, `PL6` (Fresh Installation Execution)
-   next — see
+   State and Action Intelligence), `PL5` (Deployment Planning and
+   Configuration), and `PL6` (Fresh Installation Execution) done and
+   tested, `PL7` (Verification and Host Reconciliation) next — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 

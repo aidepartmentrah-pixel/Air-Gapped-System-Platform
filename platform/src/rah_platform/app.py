@@ -1,9 +1,10 @@
-"""The RAH Offline Installation Platform backend — PL0-PL5.
+"""The RAH Offline Installation Platform backend — PL0-PL6.
 
 Health (PL0), the Generic Operation Framework (PL1), Release Discovery
 (PL2), Release Import & Registry (PL3), Application State & Action
-Intelligence (PL4), and Deployment Planning & Configuration (PL5) so far.
-Every endpoint returns the common API response envelope (§5.2).
+Intelligence (PL4), Deployment Planning & Configuration (PL5), and Fresh
+Installation Execution (PL6) so far. Every endpoint returns the common
+API response envelope (§5.2).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from rah_platform import (
     db,
     deployment_planning,
     health,
+    installation,
     operations,
     release_discovery,
     release_import,
@@ -97,6 +99,19 @@ class SuggestAvailablePortsRequest(BaseModel):
     maximum: int = 65535
     preferred_ports: list[int] = []
     exclude_application_id: str | None = None
+
+
+class InstallApplicationRequest(BaseModel):
+    """Matches architecture §4.9. `target_release_id` comes from the URL
+    path in this Platform's simpler endpoint style (matching PL3's
+    import and PL5's installation-plan), so the body only needs
+    configuration and caller identity.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    configuration: dict[str, ConfigurationInputValue] = {}
+    requested_by: str = "operator:unknown"
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -227,6 +242,18 @@ def create_app(config: Config | None = None) -> FastAPI:
                 preferred_ports=request.preferred_ports,
             )
         )
+
+    @app.post("/api/v1/releases/{release_id}/install", status_code=202)
+    async def install_application(release_id: str, request: InstallApplicationRequest = InstallApplicationRequest()):
+        configuration = {k: v.model_dump() for k, v in request.configuration.items()}
+        result = installation.install_application(
+            app.state.db_engine,
+            app.state.config,
+            release_id=release_id,
+            configuration=configuration,
+            requested_by=request.requested_by,
+        )
+        return success_envelope(result)
 
     return app
 

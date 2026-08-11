@@ -1,0 +1,3 @@
+services:
+  backend:
+    image: missing-script-app-backend:1.0.0

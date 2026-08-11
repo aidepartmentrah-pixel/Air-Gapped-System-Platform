@@ -263,3 +263,20 @@ def seed_release(
             )
         )
     return release_id
+
+
+def wait_for_terminal_operation(engine, operation_id: str, *, timeout: float = 30.0):
+    """Polls a real operation until it reaches a terminal state — the
+    same thing a real UI/Jenkins client does against the async
+    long-running-operation model (§5.3), used here because `PL6`'s
+    install execution genuinely runs in a background thread.
+    """
+    from rah_platform import operations
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        result = operations.get_operation(engine, operation_id)
+        if result["status"] in ("SUCCEEDED", "FAILED", "CANCELLED"):
+            return result
+        time.sleep(0.2)
+    raise TimeoutError(f"Operation {operation_id} did not reach a terminal state within {timeout}s")
