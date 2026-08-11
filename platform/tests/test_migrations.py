@@ -2,9 +2,21 @@ import os
 import subprocess
 from pathlib import Path
 
+from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 PLATFORM_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _current_head_revision() -> str:
+    """The real head revision, read from the migration scripts themselves
+    — not hardcoded — so this test doesn't need editing every time a
+    later slice adds another migration.
+    """
+    config = AlembicConfig(str(PLATFORM_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(PLATFORM_ROOT / "migrations"))
+    return ScriptDirectory.from_config(config).get_current_head()
 
 
 # --- Migration Test: an empty database can be migrated to the expected initial schema ---
@@ -27,5 +39,5 @@ def test_empty_database_migrates_to_initial_schema(postgres_url):
         assert row[0] == "PL0"
 
         version = conn.execute(text("SELECT version_num FROM alembic_version")).fetchone()
-        assert version[0] == "0001"
+        assert version[0] == _current_head_revision()
     engine.dispose()

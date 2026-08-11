@@ -6,11 +6,15 @@ for its own required tests.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, text
+
+PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 
 _IMAGE = "postgres:16"
 _CONTAINER_NAME = "rah-platform-pl0-test-postgres"
@@ -53,3 +57,35 @@ def postgres_url():
     yield _DB_URL
 
     subprocess.run(["docker", "rm", "-f", _CONTAINER_NAME], capture_output=True, check=False)
+
+
+@pytest.fixture(scope="session")
+def migrated_db_url(postgres_url):
+    """`postgres_url` migrated once (head — all revisions), shared by every
+    test that needs real `operations`/`operation_events`/`operation_logs`
+    tables rather than just a raw connection.
+    """
+    env = {**os.environ, "RAH_DATABASE_URL": postgres_url}
+    result = subprocess.run(
+        ["alembic", "upgrade", "head"],
+        cwd=PLATFORM_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return postgres_url
+
+
+@pytest.fixture()
+def db_engine(migrated_db_url):
+    """A real engine against the migrated test database, truncated after
+    each test so operation-lock tests always start from a clean slate.
+    """
+    engine = create_engine(migrated_db_url)
+    yield engine
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM operation_logs"))
+        conn.execute(text("DELETE FROM operation_events"))
+        conn.execute(text("DELETE FROM operations"))
+    engine.dispose()

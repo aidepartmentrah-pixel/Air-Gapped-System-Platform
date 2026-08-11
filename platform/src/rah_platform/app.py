@@ -12,7 +12,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from rah_platform import health
+from rah_platform import db, health, operations
 from rah_platform.config import Config
 from rah_platform.envelope import error_envelope, success_envelope
 from rah_platform.errors import InternalError, PlatformError
@@ -26,11 +26,12 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     app = FastAPI(title="RAH Offline Installation Platform")
     app.state.config = config
+    app.state.db_engine = db.make_engine(config.database_url)
 
     @app.exception_handler(PlatformError)
     async def _platform_error_handler(request, exc: PlatformError):  # noqa: ANN001
         logger.error("platform error: %s", exc.to_dict())
-        return JSONResponse(status_code=500, content=error_envelope(exc))
+        return JSONResponse(status_code=exc.http_status, content=error_envelope(exc))
 
     @app.exception_handler(Exception)
     async def _unexpected_error_handler(request, exc: Exception):  # noqa: ANN001
@@ -47,6 +48,18 @@ def create_app(config: Config | None = None) -> FastAPI:
         result = health.readiness(app.state.config)
         status_code = 200 if result["status"] == "READY" else 503
         return JSONResponse(status_code=status_code, content=success_envelope(result))
+
+    @app.get("/api/v1/operations/{operation_id}")
+    async def get_operation(operation_id: str):
+        return success_envelope(operations.get_operation(app.state.db_engine, operation_id))
+
+    @app.get("/api/v1/operations/{operation_id}/events")
+    async def get_operation_events(operation_id: str):
+        return success_envelope(operations.get_operation_events(app.state.db_engine, operation_id))
+
+    @app.get("/api/v1/operations/{operation_id}/logs")
+    async def get_operation_logs(operation_id: str):
+        return success_envelope(operations.get_operation_logs(app.state.db_engine, operation_id))
 
     return app
 
