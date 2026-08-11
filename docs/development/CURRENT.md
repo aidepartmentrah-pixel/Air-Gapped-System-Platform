@@ -181,10 +181,39 @@ application-level locking logic), stale-operation detection, and
 against a synthetic test operation per the plan (no real Application/
 Release exists yet — that's `PL3`). 42/42 tests pass total, all 11
 required `PL1` proofs verified live against the real running Compose
-container. Deliberately independent of the Packager track throughout —
-no Packager output involved, only the `tests/fixtures/releases/`
-placeholder Golden-fixture directory the plan calls for. `PL2` (Release
-Discovery) is next. See
+container. **`PL2` (Release Discovery) is DONE** — `scan_releases` /
+`list_candidates` / `get_candidate` against the real
+`tests/fixtures/releases/` Golden Fixtures (`valid-release-1.0.0`,
+`incomplete-release.partial`, `missing-manifest`, `malformed-manifest` —
+all four the plan names), `release_candidates` table upserted by
+`directory_name` so repeat scans never duplicate, and
+`POST /api/v1/release-candidates/scan` + two `GET` endpoints. Also fixed:
+FastAPI/Pydantic request-validation failures were bypassing the common
+response envelope since `PL0` (never triggered until `PL2`'s
+`extra="forbid"` check) — now wrapped consistently as `PLT-INPUT-003`.
+59/59 tests pass total, all 8 required `PL2` proofs verified live against
+the real running Compose container using the real fixtures. **`PL3`
+(Release Import and Registry) is DONE** — real `applications`/`releases`/
+`release_storage` tables (migration `0004`, plus the FK from
+`operations.application_id` that `PL1` deferred), `import_release()`
+re-validating manifest schema (against the real, mounted Contract
+schema — no embedded copy), Contract version, Compliance Report,
+checksums, fingerprint, and architecture/Platform compatibility, while
+trusting the Compliance Report for everything else per §3.5. 8 real
+Golden Release fixtures built and schema-verified. Real dependency gap
+recorded: `PL3` also depends on `PL1` in practice (import uses the
+Operation Framework per §7.12), which the original Master Matrix's
+`Depends On` column omitted — harmless since `PL1` already precedes
+`PL3` in the slice order, just noted rather than silently fixed. Also
+closed a gap `PL2`'s own write-up had flagged: `scan_releases` now
+cross-checks the real Registry and correctly reports `ALREADY_IMPORTED`/
+`IDENTITY_CONFLICT`. 76/76 tests pass total, all 9 required `PL3` proofs
+verified live against the real running Compose container, including the
+full accept/reject matrix (1 successful import, 3 correctly `FAILED`
+operations, 1 correctly-untracked rejection) leaving exactly the right
+Registry state and nothing more. Deliberately independent of the
+Packager track throughout — no Packager output involved anywhere. `PL4`
+(Application State and Action Intelligence) is next. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -223,8 +252,9 @@ Status: NOT STARTED
    `docs/development/Period A — Independent Product Development;
    Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
-   Foundation) and `PL1` (Generic Operation Framework) done and tested,
-   `PL2` (Release Discovery) next — see
+   Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
+   Discovery), and `PL3` (Release Import and Registry) done and tested,
+   `PL4` (Application State and Action Intelligence) next — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 

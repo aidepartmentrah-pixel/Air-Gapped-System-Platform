@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import pytest
 
+from conftest import seed_application
 from rah_platform import operations
 from rah_platform.errors import (
     ApplicationLockedError,
@@ -12,15 +13,15 @@ from rah_platform.errors import (
 )
 
 
-def _new_application_id() -> str:
-    return str(uuid.uuid4())
+def _new_application_id(db_engine) -> str:
+    return seed_application(db_engine)
 
 
 # --- Operation Creation ---
 
 
 def test_create_operation_starts_pending(db_engine):
-    app_id = _new_application_id()
+    app_id = _new_application_id(db_engine)
     op = operations.create_operation(
         db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test"
     )
@@ -36,7 +37,7 @@ def test_create_operation_starts_pending(db_engine):
 
 def test_start_operation_transitions_pending_to_running(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     started = operations.start_operation(db_engine, op["operation_id"])
     assert started["status"] == "RUNNING"
@@ -45,7 +46,7 @@ def test_start_operation_transitions_pending_to_running(db_engine):
 
 def test_start_operation_rejects_non_pending(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     operations.start_operation(db_engine, op["operation_id"])
     with pytest.raises(InvalidOperationTransitionError):
@@ -57,7 +58,7 @@ def test_start_operation_rejects_non_pending(db_engine):
 
 def test_succeed_operation_transitions_running_to_succeeded(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     operations.start_operation(db_engine, op["operation_id"])
     result = operations.succeed_operation(db_engine, op["operation_id"])
@@ -70,7 +71,7 @@ def test_succeed_operation_transitions_running_to_succeeded(db_engine):
 
 def test_fail_operation_transitions_running_to_failed(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     operations.start_operation(db_engine, op["operation_id"])
     error = DockerUnavailableError("Could not reach Docker.", stage="EXECUTING_SCRIPT")
@@ -85,7 +86,7 @@ def test_fail_operation_transitions_running_to_failed(db_engine):
 
 def test_events_retain_deterministic_sequence(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     operations.start_operation(db_engine, op["operation_id"])
     operations.update_stage(db_engine, op["operation_id"], "EXECUTING_SCRIPT")
@@ -104,7 +105,7 @@ def test_events_retain_deterministic_sequence(db_engine):
 
 def test_get_operation_returns_correct_current_state(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     operations.start_operation(db_engine, op["operation_id"])
 
@@ -122,7 +123,7 @@ def test_get_operation_not_found(db_engine):
 
 
 def test_lock_acquisition_first_operation_succeeds(db_engine):
-    app_id = _new_application_id()
+    app_id = _new_application_id(db_engine)
     op = operations.create_operation(
         db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test"
     )
@@ -130,7 +131,7 @@ def test_lock_acquisition_first_operation_succeeds(db_engine):
 
 
 def test_lock_conflict_second_operation_rejected(db_engine):
-    app_id = _new_application_id()
+    app_id = _new_application_id(db_engine)
     operations.create_operation(
         db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test"
     )
@@ -142,7 +143,7 @@ def test_lock_conflict_second_operation_rejected(db_engine):
 
 
 def test_lock_release_on_success_allows_new_operation(db_engine):
-    app_id = _new_application_id()
+    app_id = _new_application_id(db_engine)
     first = operations.create_operation(
         db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test"
     )
@@ -156,7 +157,7 @@ def test_lock_release_on_success_allows_new_operation(db_engine):
 
 
 def test_lock_release_on_failure_allows_new_operation(db_engine):
-    app_id = _new_application_id()
+    app_id = _new_application_id(db_engine)
     first = operations.create_operation(
         db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test"
     )
@@ -171,10 +172,10 @@ def test_lock_release_on_failure_allows_new_operation(db_engine):
 
 def test_lock_is_per_application(db_engine):
     op1 = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     op2 = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     assert op1["status"] == "PENDING"
     assert op2["status"] == "PENDING"
@@ -185,7 +186,7 @@ def test_lock_is_per_application(db_engine):
 
 def test_stale_running_operation_marked_failed(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     operations.start_operation(db_engine, op["operation_id"])
 
@@ -204,7 +205,7 @@ def test_stale_running_operation_marked_failed(db_engine):
 
 
 def test_stale_detection_frees_the_lock(db_engine):
-    app_id = _new_application_id()
+    app_id = _new_application_id(db_engine)
     op = operations.create_operation(
         db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test"
     )
@@ -224,7 +225,7 @@ def test_stale_detection_frees_the_lock(db_engine):
 
 def test_failed_operation_produces_correlated_error(db_engine):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=_new_application_id(db_engine), requested_by="operator:test"
     )
     operations.start_operation(db_engine, op["operation_id"])
     error = DockerUnavailableError("Could not reach Docker.", stage="EXECUTING_SCRIPT")

@@ -1,0 +1,28 @@
+{
+  "contract_version": "1.0",
+  "generator_version": "0.0.1",
+  "validator_version": "0.0.1",
+  "generated_at": "2026-08-01T00:05:00+00:00",
+  "release_identity": {
+    "application_slug": "golden-test-app",
+    "version": "1.0.0",
+    "release_fingerprint": "sha256:80dace273d85b0f081a9d65931d5932d165e8b6ed7071c13de71b5ca07eb9370"
+  },
+  "validation_environment": "Platform Golden Fixture Generator",
+  "overall_result": "PASS",
+  "summary": {
+    "rules_executed": 1,
+    "rules_passed": 1,
+    "rules_failed": 0,
+    "rules_not_applicable": 0,
+    "rules_not_executed": 0
+  },
+  "rules": [
+    {
+      "id": "RC-CON-001",
+      "category": "RC-CON",
+      "result": "PASS",
+      "message": "Synthetic Golden Fixture."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "contract_version": "1.0",
+  "generator_version": "0.0.1",
+  "validator_version": "0.0.1",
+  "generated_at": "2026-08-01T00:05:00+00:00",
+  "release_identity": {
+    "application_slug": "golden-test-app",
+    "version": "1.0.3",
+    "release_fingerprint": "sha256:056d5c60d247613d860c7ceb26c5f23dc657bef3947d1a5f4fa1617772d25ebc"
+  },
+  "validation_environment": "Platform Golden Fixture Generator",
+  "overall_result": "FAIL",
+  "summary": {
+    "rules_executed": 1,
+    "rules_passed": 0,
+    "rules_failed": 1,
+    "rules_not_applicable": 0,
+    "rules_not_executed": 0
+  },
+  "rules": [
+    {
+      "id": "RC-CON-001",
+      "category": "RC-CON",
+      "result": "FAIL",
+      "message": "Synthetic Golden Fixture \u2014 deliberately failed for PL3 testing."
+    }
+  ]
+}

@@ -21,10 +21,12 @@ services:
     environment:
       RAH_DATABASE_URL: postgresql+psycopg://rah_platform:rah_platform@postgres:5432/rah_platform
       RAH_RELEASE_STORAGE_PATH: /data/releases
+      RAH_CONTRACTS_PATH: /contracts/1.0
       RAH_LOG_LEVEL: INFO
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../tests/fixtures/releases:/data/releases
+      - ../contracts/1.0:/contracts/1.0:ro
     ports:
       - "8000:8000"
 

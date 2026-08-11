@@ -1,0 +1,6 @@
+application:
+  name: "Golden Test App
+  slug: golden-test-app
+  this is not: [valid yaml structure
+release:
+ version 1.0.3

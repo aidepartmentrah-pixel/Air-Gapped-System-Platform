@@ -2,6 +2,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
+from conftest import seed_application
 from rah_platform import operations
 from rah_platform.app import create_app
 from rah_platform.config import Config
@@ -17,7 +18,7 @@ def _config(migrated_db_url) -> Config:
 
 def test_get_operation_endpoint(db_engine, migrated_db_url):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=str(uuid.uuid4()), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=seed_application(db_engine), requested_by="operator:test"
     )
     response = _client(_config(migrated_db_url)).get(f"/api/v1/operations/{op['operation_id']}")
     assert response.status_code == 200
@@ -38,7 +39,7 @@ def test_get_operation_endpoint_not_found(db_engine, migrated_db_url):
 
 def test_get_operation_events_endpoint(db_engine, migrated_db_url):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=str(uuid.uuid4()), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=seed_application(db_engine), requested_by="operator:test"
     )
     response = _client(_config(migrated_db_url)).get(f"/api/v1/operations/{op['operation_id']}/events")
     assert response.status_code == 200
@@ -49,7 +50,7 @@ def test_get_operation_events_endpoint(db_engine, migrated_db_url):
 
 def test_get_operation_logs_endpoint(db_engine, migrated_db_url):
     op = operations.create_operation(
-        db_engine, operation_type="TEST_OPERATION", application_id=str(uuid.uuid4()), requested_by="operator:test"
+        db_engine, operation_type="TEST_OPERATION", application_id=seed_application(db_engine), requested_by="operator:test"
     )
     response = _client(_config(migrated_db_url)).get(f"/api/v1/operations/{op['operation_id']}/logs")
     assert response.status_code == 200
@@ -59,7 +60,7 @@ def test_get_operation_logs_endpoint(db_engine, migrated_db_url):
 
 
 def test_lock_conflict_returns_423_through_create_operation(db_engine, migrated_db_url):
-    app_id = str(uuid.uuid4())
+    app_id = seed_application(db_engine)
     operations.create_operation(
         db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test"
     )

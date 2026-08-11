@@ -1,8 +1,8 @@
-"""The RAH Offline Installation Platform backend — PL0 slice.
+"""The RAH Offline Installation Platform backend — PL0-PL3.
 
-Only the health endpoints exist at this stage; the Platform "does not yet
-manage Applications" per the PL0 objective. Every endpoint returns the
-common API response envelope (§5.2).
+Health (PL0), the Generic Operation Framework (PL1), Release Discovery
+(PL2), and Release Import & Registry (PL3) so far. Every endpoint returns
+the common API response envelope (§5.2).
 """
 
 from __future__ import annotations
@@ -10,14 +10,44 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict
 
-from rah_platform import db, health, operations
+from rah_platform import db, health, operations, release_discovery, release_import
 from rah_platform.config import Config
 from rah_platform.envelope import error_envelope, success_envelope
-from rah_platform.errors import InternalError, PlatformError
+from rah_platform.errors import InternalError, PlatformError, RequestValidationFailedError
 
 logger = logging.getLogger("rah_platform")
+
+
+class ScanReleasesRequest(BaseModel):
+    """Matches architecture §4.2 exactly — deliberately has no path field.
+    `extra="forbid"` means an ordinary API caller cannot smuggle an
+    arbitrary filesystem path in (PL2's "Arbitrary Directory" test): the
+    request is rejected with `422` before it ever reaches `scan_releases`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rescan_known_releases: bool = False
+    include_rejected_candidates: bool = True
+
+
+class ImportReleaseRequest(BaseModel):
+    """Matches architecture §4.3's `expected_fingerprint` field.
+    `requested_by` is accepted directly in the body rather than derived
+    from an authenticated session, since no authentication mechanism is
+    built anywhere in the PL0-PL9 plan — §4.23 names deriving it from
+    auth as the eventual target, not something Period A Platform builds.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    requested_by: str = "operator:unknown"
+    expected_fingerprint: str | None = None
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -32,6 +62,14 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def _platform_error_handler(request, exc: PlatformError):  # noqa: ANN001
         logger.error("platform error: %s", exc.to_dict())
         return JSONResponse(status_code=exc.http_status, content=error_envelope(exc))
+
+    @app.exception_handler(RequestValidationError)
+    async def _request_validation_handler(request, exc: RequestValidationError):  # noqa: ANN001
+        wrapped = RequestValidationFailedError(
+            "The request body failed validation.",
+            details={"errors": jsonable_encoder(exc.errors())},
+        )
+        return JSONResponse(status_code=wrapped.http_status, content=error_envelope(wrapped))
 
     @app.exception_handler(Exception)
     async def _unexpected_error_handler(request, exc: Exception):  # noqa: ANN001
@@ -60,6 +98,30 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.get("/api/v1/operations/{operation_id}/logs")
     async def get_operation_logs(operation_id: str):
         return success_envelope(operations.get_operation_logs(app.state.db_engine, operation_id))
+
+    @app.post("/api/v1/release-candidates/scan")
+    async def scan_release_candidates(request: ScanReleasesRequest = ScanReleasesRequest()):
+        result = release_discovery.scan_releases(app.state.db_engine, app.state.config.release_storage_path)
+        return success_envelope(result)
+
+    @app.get("/api/v1/release-candidates")
+    async def list_release_candidates():
+        return success_envelope(release_discovery.list_candidates(app.state.db_engine))
+
+    @app.get("/api/v1/release-candidates/{candidate_id}")
+    async def get_release_candidate(candidate_id: str):
+        return success_envelope(release_discovery.get_candidate(app.state.db_engine, candidate_id))
+
+    @app.post("/api/v1/release-candidates/{candidate_id}/import")
+    async def import_release_candidate(candidate_id: str, request: ImportReleaseRequest = ImportReleaseRequest()):
+        result = release_import.import_release(
+            app.state.db_engine,
+            app.state.config,
+            candidate_id=candidate_id,
+            requested_by=request.requested_by,
+            expected_fingerprint=request.expected_fingerprint,
+        )
+        return success_envelope(result)
 
     return app
 

@@ -15,6 +15,8 @@ _DEFAULT_DATABASE_URL = (
     "postgresql+psycopg://rah_platform:rah_platform@localhost:5432/rah_platform"
 )
 _DEFAULT_RELEASE_STORAGE_PATH = "/data/releases"
+_DEFAULT_CONTRACTS_PATH = "/contracts/1.0"
+_DEFAULT_PLATFORM_VERSION = "1.0.0"
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,8 @@ class Config:
     database_url: str
     release_storage_path: str
     log_level: str
+    contracts_path: str = _DEFAULT_CONTRACTS_PATH
+    platform_version: str = _DEFAULT_PLATFORM_VERSION
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -31,4 +35,6 @@ class Config:
                 "RAH_RELEASE_STORAGE_PATH", _DEFAULT_RELEASE_STORAGE_PATH
             ),
             log_level=os.environ.get("RAH_LOG_LEVEL", "INFO"),
+            contracts_path=os.environ.get("RAH_CONTRACTS_PATH", _DEFAULT_CONTRACTS_PATH),
+            platform_version=os.environ.get("RAH_PLATFORM_VERSION", _DEFAULT_PLATFORM_VERSION),
         )

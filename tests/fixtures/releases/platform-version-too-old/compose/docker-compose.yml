@@ -1,0 +1,3 @@
+services:
+  backend:
+    image: golden-test-app-backend:1.0.6

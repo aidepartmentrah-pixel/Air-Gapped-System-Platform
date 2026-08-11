@@ -9,12 +9,19 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, text
 
+from rah_platform.models import applications
+
 PLATFORM_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = PLATFORM_ROOT.parent
+CONTRACTS_PATH = REPO_ROOT / "contracts" / "1.0"
+FIXTURES_ROOT = REPO_ROOT / "tests" / "fixtures" / "releases"
 
 _IMAGE = "postgres:16"
 _CONTAINER_NAME = "rah-platform-pl0-test-postgres"
@@ -80,12 +87,39 @@ def migrated_db_url(postgres_url):
 @pytest.fixture()
 def db_engine(migrated_db_url):
     """A real engine against the migrated test database, truncated after
-    each test so operation-lock tests always start from a clean slate.
+    each test so operation-lock and identity tests always start from a
+    clean slate. Deletion order respects foreign keys: children first.
     """
     engine = create_engine(migrated_db_url)
     yield engine
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM release_candidates"))
         conn.execute(text("DELETE FROM operation_logs"))
         conn.execute(text("DELETE FROM operation_events"))
         conn.execute(text("DELETE FROM operations"))
+        conn.execute(text("DELETE FROM release_storage"))
+        conn.execute(text("DELETE FROM releases"))
+        conn.execute(text("DELETE FROM applications"))
     engine.dispose()
+
+
+def seed_application(engine, *, slug: str | None = None, name: str | None = None) -> str:
+    """Inserts a real `applications` row and returns its id. Needed by
+    every operation test since PL3 added the foreign key from
+    `operations.application_id` — PL1's "synthetic test operation" still
+    needs a real application to reference, it just doesn't need a real
+    Release.
+    """
+    application_id = str(uuid.uuid4())
+    slug = slug or f"test-app-{application_id[:8]}"
+    with engine.begin() as conn:
+        conn.execute(
+            applications.insert().values(
+                application_id=application_id,
+                slug=slug,
+                name=name or slug,
+                description=None,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+    return application_id

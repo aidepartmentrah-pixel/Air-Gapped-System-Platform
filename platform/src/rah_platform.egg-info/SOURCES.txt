@@ -7,6 +7,9 @@ src/rah_platform/docker_client.py
 src/rah_platform/envelope.py
 src/rah_platform/errors.py
 src/rah_platform/health.py
+src/rah_platform/models.py
+src/rah_platform/operations.py
+src/rah_platform/release_discovery.py
 src/rah_platform/release_storage.py
 src/rah_platform.egg-info/PKG-INFO
 src/rah_platform.egg-info/SOURCES.txt
@@ -21,4 +24,8 @@ tests/test_envelope.py
 tests/test_errors.py
 tests/test_health.py
 tests/test_migrations.py
+tests/test_operations.py
+tests/test_operations_api.py
+tests/test_release_discovery.py
+tests/test_release_discovery_api.py
 tests/test_release_storage.py

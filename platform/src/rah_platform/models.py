@@ -1,12 +1,15 @@
 """Registry table definitions — PL1 introduces `operations`,
-`operation_events`, and `operation_logs`. No `applications`/`releases`
-tables exist yet (PL3's job), so `operations.application_id` is a plain
-UUID column without a foreign key for now — the constraint gets added
-once `applications` exists.
+`operation_events`, and `operation_logs`. PL2 adds `release_candidates` —
+bookkeeping about what `scan_releases` has physically seen in Release
+Storage, not a registration of an Application or Release (§7.5 Discovery/
+Import/Deployment Separation: "Discovering a Release does not import
+it"). PL3 adds `applications`/`releases`/`release_storage` — the real
+Registry — and finally adds the foreign key from
+`operations.application_id` that PL1 deferred (migration `0004`).
 
-Plain SQLAlchemy Core `Table` objects, not the ORM — PL1's access
-patterns are simple enough (a handful of inserts/selects per operation)
-that a declarative layer would add ceremony without buying anything yet.
+Plain SQLAlchemy Core `Table` objects, not the ORM — access patterns so
+far are simple enough (a handful of inserts/selects per call) that a
+declarative layer would add ceremony without buying anything yet.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ operations = sa.Table(
     metadata,
     sa.Column("operation_id", UUID(as_uuid=False), primary_key=True),
     sa.Column("operation_type", sa.String, nullable=False),
-    sa.Column("application_id", UUID(as_uuid=False), nullable=False),
+    sa.Column("application_id", UUID(as_uuid=False), sa.ForeignKey("applications.application_id"), nullable=False),
     sa.Column("status", sa.String, nullable=False),
     sa.Column("stage", sa.String, nullable=True),
     sa.Column("requested_by", sa.String, nullable=False),
@@ -66,4 +69,66 @@ operation_logs = sa.Table(
     sa.Column("details", JSONB, nullable=True),
     sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
     sa.UniqueConstraint("operation_id", "sequence", name="uq_operation_logs_operation_sequence"),
+)
+
+release_candidates = sa.Table(
+    "release_candidates",
+    metadata,
+    sa.Column("candidate_id", UUID(as_uuid=False), primary_key=True),
+    sa.Column("directory_name", sa.String, nullable=False, unique=True),
+    sa.Column("application_slug", sa.String, nullable=True),
+    sa.Column("release_version", sa.String, nullable=True),
+    sa.Column("discovery_state", sa.String, nullable=False),
+    sa.Column("already_imported", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("issues", JSONB, nullable=False),
+    sa.Column("first_seen_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("last_scanned_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+applications = sa.Table(
+    "applications",
+    metadata,
+    sa.Column("application_id", UUID(as_uuid=False), primary_key=True),
+    sa.Column("slug", sa.String, nullable=False, unique=True),
+    sa.Column("name", sa.String, nullable=False),
+    sa.Column("description", sa.String, nullable=True),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+releases = sa.Table(
+    "releases",
+    metadata,
+    sa.Column("release_id", UUID(as_uuid=False), primary_key=True),
+    sa.Column(
+        "application_id",
+        UUID(as_uuid=False),
+        sa.ForeignKey("applications.application_id"),
+        nullable=False,
+    ),
+    sa.Column("version", sa.String, nullable=False),
+    sa.Column("contract_version", sa.String, nullable=False),
+    sa.Column("manifest_schema_version", sa.String, nullable=False),
+    sa.Column("fingerprint", sa.String, nullable=False),
+    sa.Column("summary", sa.String, nullable=True),
+    sa.Column("manifest", JSONB, nullable=False),
+    sa.Column("created_at_engineering", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("imported_at", sa.DateTime(timezone=True), nullable=False),
+    sa.UniqueConstraint("application_id", "version", name="uq_releases_application_version"),
+)
+
+release_storage = sa.Table(
+    "release_storage",
+    metadata,
+    sa.Column(
+        "release_id",
+        UUID(as_uuid=False),
+        sa.ForeignKey("releases.release_id"),
+        primary_key=True,
+    ),
+    sa.Column("directory_name", sa.String, nullable=False),
+    sa.Column("path", sa.String, nullable=False),
+    sa.Column("state", sa.String, nullable=False),
+    sa.Column("integrity_verified", sa.Boolean, nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
 )
