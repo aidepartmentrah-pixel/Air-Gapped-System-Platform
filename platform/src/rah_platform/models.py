@@ -5,7 +5,13 @@ Storage, not a registration of an Application or Release (§7.5 Discovery/
 Import/Deployment Separation: "Discovering a Release does not import
 it"). PL3 adds `applications`/`releases`/`release_storage` — the real
 Registry — and finally adds the foreign key from
-`operations.application_id` that PL1 deferred (migration `0004`).
+`operations.application_id` that PL1 deferred (migration `0004`). PL4
+adds `deployments` and `applications.active_deployment_id` (migration
+`0005`) — the schema `get_active_deployment`/`get_available_actions`
+read from, per §5.14's `operation_id`/`deployment_id` distinction. No
+real installation exists until `PL6`, so nothing writes `deployments` for
+real yet; `PL4`'s own tests seed it directly to exercise the
+already-installed decision paths.
 
 Plain SQLAlchemy Core `Table` objects, not the ORM — access patterns so
 far are simple enough (a handful of inserts/selects per call) that a
@@ -93,6 +99,12 @@ applications = sa.Table(
     sa.Column("name", sa.String, nullable=False),
     sa.Column("description", sa.String, nullable=True),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column(
+        "active_deployment_id",
+        UUID(as_uuid=False),
+        sa.ForeignKey("deployments.deployment_id"),
+        nullable=True,
+    ),
 )
 
 releases = sa.Table(
@@ -114,6 +126,21 @@ releases = sa.Table(
     sa.Column("created_at_engineering", sa.DateTime(timezone=True), nullable=True),
     sa.Column("imported_at", sa.DateTime(timezone=True), nullable=False),
     sa.UniqueConstraint("application_id", "version", name="uq_releases_application_version"),
+)
+
+deployments = sa.Table(
+    "deployments",
+    metadata,
+    sa.Column("deployment_id", UUID(as_uuid=False), primary_key=True),
+    sa.Column(
+        "application_id", UUID(as_uuid=False), sa.ForeignKey("applications.application_id"), nullable=False
+    ),
+    sa.Column("release_id", UUID(as_uuid=False), sa.ForeignKey("releases.release_id"), nullable=False),
+    sa.Column(
+        "operation_id", UUID(as_uuid=False), sa.ForeignKey("operations.operation_id"), nullable=True
+    ),
+    sa.Column("verification_status", sa.String, nullable=True),
+    sa.Column("deployed_at", sa.DateTime(timezone=True), nullable=False),
 )
 
 release_storage = sa.Table(

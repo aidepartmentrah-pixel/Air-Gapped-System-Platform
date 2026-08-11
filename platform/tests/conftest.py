@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 
-from rah_platform.models import applications
+from rah_platform.models import applications, deployments, release_storage, releases
 
 PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = PLATFORM_ROOT.parent
@@ -96,6 +96,10 @@ def db_engine(migrated_db_url):
         conn.execute(text("DELETE FROM release_candidates"))
         conn.execute(text("DELETE FROM operation_logs"))
         conn.execute(text("DELETE FROM operation_events"))
+        # applications.active_deployment_id <-> deployments.application_id
+        # is a real circular FK — break it before deleting either side.
+        conn.execute(text("UPDATE applications SET active_deployment_id = NULL"))
+        conn.execute(text("DELETE FROM deployments"))
         conn.execute(text("DELETE FROM operations"))
         conn.execute(text("DELETE FROM release_storage"))
         conn.execute(text("DELETE FROM releases"))
@@ -123,3 +127,96 @@ def seed_application(engine, *, slug: str | None = None, name: str | None = None
             )
         )
     return application_id
+
+
+def seed_active_deployment(engine, *, application_id: str, release_id: str, verification_status: str = "PASS") -> str:
+    """Inserts a `deployments` row and sets it as the application's
+    `active_deployment_id`. No real install exists until `PL6` — `PL4`'s
+    own tests seed this directly to exercise the already-installed
+    decision paths, exactly as the pre-PL0 review anticipated for this
+    slice.
+    """
+    deployment_id = str(uuid.uuid4())
+    with engine.begin() as conn:
+        conn.execute(
+            deployments.insert().values(
+                deployment_id=deployment_id,
+                application_id=application_id,
+                release_id=release_id,
+                operation_id=None,
+                verification_status=verification_status,
+                deployed_at=datetime.now(timezone.utc),
+            )
+        )
+        conn.execute(
+            applications.update()
+            .where(applications.c.application_id == application_id)
+            .values(active_deployment_id=deployment_id)
+        )
+    return deployment_id
+
+
+def seed_release(
+    engine,
+    *,
+    application_id: str,
+    version: str,
+    supported_operations: dict | None = None,
+    accepted_installed_versions: list[str] | None = None,
+    storage_state: str = "AVAILABLE",
+) -> str:
+    """Inserts a `releases` (+ `release_storage`) row directly, with a
+    hand-built manifest, bypassing `release_import.import_release`
+    entirely. `PL4`'s decision logic only cares about Registry state, not
+    how a Release got there — this lets each test exercise an exact
+    `supported_operations`/`transition` combination without needing a
+    dedicated Golden Fixture directory per scenario.
+    """
+    release_id = str(uuid.uuid4())
+    manifest = {
+        "manifest_schema_version": "1.0",
+        "application": {"name": "Seeded App", "slug": "seeded-app", "description": "test"},
+        "release": {
+            "version": version,
+            "created_at": "2026-08-01T00:00:00+00:00",
+            "summary": f"Seeded release {version}",
+            "release_type": "application",
+            "engineering_state": "awaiting_offline_qualification",
+        },
+        "compatibility": {"release_contract_version": "1.0", "minimum_rah_oip_version": "1.0.0", "supported_architectures": ["amd64"]},
+        "deployment": {
+            "canonical_path": "/opt/rah/apps/seeded-app",
+            "compose_project_name": "rah-seeded-app",
+            "entrypoints": {},
+            "supported_operations": supported_operations or {"fresh_install": True},
+            "transition": {"accepted_installed_versions": accepted_installed_versions} if accepted_installed_versions else {},
+        },
+    }
+    now = datetime.now(timezone.utc)
+    with engine.begin() as conn:
+        conn.execute(
+            releases.insert().values(
+                release_id=release_id,
+                application_id=application_id,
+                version=version,
+                contract_version="1.0",
+                manifest_schema_version="1.0",
+                fingerprint=f"sha256:test-{release_id}",
+                summary=manifest["release"]["summary"],
+                manifest=manifest,
+                created_at_engineering=manifest["release"]["created_at"],
+                imported_at=now,
+            )
+        )
+        conn.execute(
+            release_storage.insert().values(
+                release_id=release_id,
+                directory_name=f"seeded-{version}",
+                path=f"/data/releases/seeded-{version}",
+                state=storage_state,
+                integrity_verified=True,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    return release_id

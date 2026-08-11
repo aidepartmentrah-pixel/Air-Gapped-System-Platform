@@ -258,3 +258,27 @@ class RequiredSharedServiceUnavailableError(PlatformError):
     category = "COMPATIBILITY"
     retryable = False
     http_status = 422
+
+
+# --- PL4: Application State and Action Intelligence ---
+
+
+class ApplicationNotFoundError(PlatformError):
+    code = "PLT-APPLICATION-001"
+    category = "APPLICATION"
+    retryable = False
+    http_status = 404
+
+
+class ReleaseNotFoundError(PlatformError):
+    code = "PLT-RELEASE-001"
+    category = "RELEASE"
+    retryable = False
+    http_status = 404
+
+
+class ReleaseBelongsToAnotherApplicationError(PlatformError):
+    code = "PLT-RELEASE-003"
+    category = "RELEASE"
+    retryable = False
+    http_status = 422

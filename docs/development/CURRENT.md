@@ -212,8 +212,22 @@ verified live against the real running Compose container, including the
 full accept/reject matrix (1 successful import, 3 correctly `FAILED`
 operations, 1 correctly-untracked rejection) leaving exactly the right
 Registry state and nothing more. Deliberately independent of the
-Packager track throughout — no Packager output involved anywhere. `PL4`
-(Application State and Action Intelligence) is next. See
+Packager track throughout — no Packager output involved anywhere.
+**`PL4` (Application State and Action Intelligence) is DONE** —
+`application_query.py`, a minimal `deployments` table +
+`applications.active_deployment_id` (migration `0005`, no lifecycle
+script ever writes it here — `PL4` is read-only, its own tests seed it
+directly per the pre-PL0 review's own anticipation of this exact gap).
+Real, evidence-based decision logic for
+`INSTALL`/`UPDATE`/`DOWNGRADE`/`REINSTALL`/`VERIFY`/`BACKUP` (`RECOVER`
+correctly always unsupported — no failure-tracking exists until `PL8`).
+`operational_health` honestly reports `UNKNOWN` for any installed
+application, never a fabricated `HEALTHY`, since no real host
+verification exists until `PL7`. 98/98 tests pass total, all 8 required
+`PL4` proofs verified live against the real running Compose container,
+combining a real imported Golden Release with direct Registry seeding
+for the installed-state half. `PL5` (Deployment Planning and
+Configuration) is next. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -253,8 +267,9 @@ Status: NOT STARTED
    Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
    Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
-   Discovery), and `PL3` (Release Import and Registry) done and tested,
-   `PL4` (Application State and Action Intelligence) next — see
+   Discovery), `PL3` (Release Import and Registry), and `PL4`
+   (Application State and Action Intelligence) done and tested, `PL5`
+   (Deployment Planning and Configuration) next — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 

@@ -1,21 +1,22 @@
-"""The RAH Offline Installation Platform backend — PL0-PL3.
+"""The RAH Offline Installation Platform backend — PL0-PL4.
 
 Health (PL0), the Generic Operation Framework (PL1), Release Discovery
-(PL2), and Release Import & Registry (PL3) so far. Every endpoint returns
-the common API response envelope (§5.2).
+(PL2), Release Import & Registry (PL3), and Application State & Action
+Intelligence (PL4) so far. Every endpoint returns the common API response
+envelope (§5.2).
 """
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from rah_platform import db, health, operations, release_discovery, release_import
+from rah_platform import application_query, db, health, operations, release_discovery, release_import
 from rah_platform.config import Config
 from rah_platform.envelope import error_envelope, success_envelope
 from rah_platform.errors import InternalError, PlatformError, RequestValidationFailedError
@@ -122,6 +123,34 @@ def create_app(config: Config | None = None) -> FastAPI:
             expected_fingerprint=request.expected_fingerprint,
         )
         return success_envelope(result)
+
+    @app.get("/api/v1/applications")
+    async def list_applications():
+        return success_envelope(application_query.list_applications(app.state.db_engine))
+
+    @app.get("/api/v1/applications/{application_id}")
+    async def get_application(application_id: str):
+        return success_envelope(application_query.get_application(app.state.db_engine, application_id))
+
+    @app.get("/api/v1/applications/{application_id}/releases")
+    async def list_application_releases(application_id: str):
+        return success_envelope(application_query.list_application_releases(app.state.db_engine, application_id))
+
+    @app.get("/api/v1/releases/{release_id}")
+    async def get_release(release_id: str):
+        return success_envelope(application_query.get_release(app.state.db_engine, release_id))
+
+    @app.get("/api/v1/applications/{application_id}/active-deployment")
+    async def get_active_deployment(application_id: str):
+        return success_envelope(application_query.get_active_deployment(app.state.db_engine, application_id))
+
+    @app.get("/api/v1/applications/{application_id}/actions")
+    async def get_available_actions(application_id: str, target_release_id: str | None = Query(default=None)):
+        return success_envelope(
+            application_query.get_available_actions(
+                app.state.db_engine, application_id, target_release_id=target_release_id
+            )
+        )
 
     return app
 
