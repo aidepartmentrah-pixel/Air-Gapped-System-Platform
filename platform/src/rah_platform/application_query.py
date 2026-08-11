@@ -31,7 +31,7 @@ from rah_platform.errors import (
 from rah_platform.models import applications, deployments, releases, release_storage
 
 
-def _get_application_row(conn, application_id: str):
+def get_application_row(conn, application_id: str):
     row = conn.execute(
         applications.select().where(applications.c.application_id == application_id)
     ).mappings().first()
@@ -43,7 +43,7 @@ def _get_application_row(conn, application_id: str):
     return row
 
 
-def _get_release_row(conn, release_id: str):
+def get_release_row(conn, release_id: str):
     row = conn.execute(releases.select().where(releases.c.release_id == release_id)).mappings().first()
     if row is None:
         raise ReleaseNotFoundError(
@@ -60,7 +60,7 @@ def _get_active_deployment_row(conn, application_row):
     ).mappings().first()
 
 
-def _storage_state(conn, release_row) -> str:
+def get_storage_state(conn, release_row) -> str:
     storage = conn.execute(
         release_storage.select().where(release_storage.c.release_id == release_row["release_id"])
     ).mappings().first()
@@ -68,7 +68,7 @@ def _storage_state(conn, release_row) -> str:
 
 
 def _release_deployment_state(conn, release_row, active_deployment_row) -> str:
-    if _storage_state(conn, release_row) == "REMOVED_FROM_STORAGE":
+    if get_storage_state(conn, release_row) == "REMOVED_FROM_STORAGE":
         return "REMOVED_FROM_STORAGE"
     if active_deployment_row and active_deployment_row["release_id"] == release_row["release_id"]:
         return "ACTIVE"
@@ -90,7 +90,7 @@ def _release_result(conn, release_row, active_deployment_row) -> dict:
         "imported_at": release_row["imported_at"].isoformat(),
         "contract_version": release_row["contract_version"],
         "manifest_schema_version": release_row["manifest_schema_version"],
-        "storage_state": _storage_state(conn, release_row),
+        "storage_state": get_storage_state(conn, release_row),
         "release_fingerprint": release_row["fingerprint"],
         "supported_operations": {
             "fresh_install": bool(supported.get("fresh_install", False)),
@@ -157,13 +157,13 @@ def list_applications(engine) -> dict:
 
 def get_application(engine, application_id: str) -> dict:
     with engine.connect() as conn:
-        row = _get_application_row(conn, application_id)
+        row = get_application_row(conn, application_id)
         return _application_result(conn, row)
 
 
 def list_application_releases(engine, application_id: str) -> dict:
     with engine.connect() as conn:
-        application_row = _get_application_row(conn, application_id)
+        application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
         rows = conn.execute(
             releases.select()
@@ -175,15 +175,15 @@ def list_application_releases(engine, application_id: str) -> dict:
 
 def get_release(engine, release_id: str) -> dict:
     with engine.connect() as conn:
-        release_row = _get_release_row(conn, release_id)
-        application_row = _get_application_row(conn, release_row["application_id"])
+        release_row = get_release_row(conn, release_id)
+        application_row = get_application_row(conn, release_row["application_id"])
         active_deployment_row = _get_active_deployment_row(conn, application_row)
         return _release_result(conn, release_row, active_deployment_row)
 
 
 def get_active_deployment(engine, application_id: str) -> dict | None:
     with engine.connect() as conn:
-        application_row = _get_application_row(conn, application_id)
+        application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
         if active_deployment_row is None:
             return None
@@ -289,7 +289,7 @@ def _evaluate_recover() -> dict:
 
 def get_available_actions(engine, application_id: str, target_release_id: str | None = None) -> dict:
     with engine.connect() as conn:
-        application_row = _get_application_row(conn, application_id)
+        application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
 
         active_release_row = None
@@ -301,13 +301,13 @@ def get_available_actions(engine, application_id: str, target_release_id: str | 
         target_release_row = None
         target_storage_state = None
         if target_release_id:
-            target_release_row = _get_release_row(conn, target_release_id)
+            target_release_row = get_release_row(conn, target_release_id)
             if target_release_row["application_id"] != application_id:
                 raise ReleaseBelongsToAnotherApplicationError(
                     "The selected Release does not belong to this application.",
                     details={"application_id": application_id, "release_id": target_release_id},
                 )
-            target_storage_state = _storage_state(conn, target_release_row)
+            target_storage_state = get_storage_state(conn, target_release_row)
 
         actions = [
             _evaluate_install(active_deployment_row, target_release_row, target_storage_state),

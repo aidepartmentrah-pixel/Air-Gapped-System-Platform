@@ -226,8 +226,23 @@ application, never a fabricated `HEALTHY`, since no real host
 verification exists until `PL7`. 98/98 tests pass total, all 8 required
 `PL4` proofs verified live against the real running Compose container,
 combining a real imported Golden Release with direct Registry seeding
-for the installed-state half. `PL5` (Deployment Planning and
-Configuration) is next. See
+for the installed-state half. **`PL5` (Deployment Planning and
+Configuration) is DONE** — `deployment_planning.py`
+(`prepare_installation`/`prepare_update`/`validate_deployment_inputs`/
+`suggest_available_ports`) plus `deployment_configuration` (migration
+`0006`). Port checks are real `socket.bind()` calls against this host,
+not simulated. `prepare_update` reuses `PL4`'s `get_available_actions()`
+directly for transition validity rather than re-deriving it — the two
+now provably agree by construction. Secret-flagged configuration inputs
+never carry a `current_value`, fresh or preserved, only `value_state`.
+Along the way, `application_query.py`'s three lookup helpers were
+promoted from private to shared internal functions since `PL5` genuinely
+needed them — no behavior change, full suite green before and after.
+113/113 tests pass total, all 10 required `PL5` proofs verified live
+against the real running Compose container, including a real update plan
+showing real preserved configuration and an explicit mandatory-backup
+requirement. `PL6` (Fresh Installation Execution) is next — the first
+slice that actually changes host/Docker state. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -267,9 +282,10 @@ Status: NOT STARTED
    Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
    Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
-   Discovery), `PL3` (Release Import and Registry), and `PL4`
-   (Application State and Action Intelligence) done and tested, `PL5`
-   (Deployment Planning and Configuration) next — see
+   Discovery), `PL3` (Release Import and Registry), `PL4` (Application
+   State and Action Intelligence), and `PL5` (Deployment Planning and
+   Configuration) done and tested, `PL6` (Fresh Installation Execution)
+   next — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 

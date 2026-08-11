@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 
-from rah_platform.models import applications, deployments, release_storage, releases
+from rah_platform.models import applications, deployment_configuration, deployments, release_storage, releases
 
 PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = PLATFORM_ROOT.parent
@@ -99,6 +99,7 @@ def db_engine(migrated_db_url):
         # applications.active_deployment_id <-> deployments.application_id
         # is a real circular FK — break it before deleting either side.
         conn.execute(text("UPDATE applications SET active_deployment_id = NULL"))
+        conn.execute(text("DELETE FROM deployment_configuration"))
         conn.execute(text("DELETE FROM deployments"))
         conn.execute(text("DELETE FROM operations"))
         conn.execute(text("DELETE FROM release_storage"))
@@ -156,6 +157,27 @@ def seed_active_deployment(engine, *, application_id: str, release_id: str, veri
     return deployment_id
 
 
+def seed_deployment_configuration(
+    engine, *, deployment_id: str, key: str, value: str | None = None, secret: bool = False, source: str = "operator"
+) -> None:
+    """Inserts a `deployment_configuration` row directly — `PL5`'s own
+    tests seed this to exercise `prepare_update`'s "preserve existing
+    configuration" path, since nothing writes this table for real until
+    `PL6` performs a real installation.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            deployment_configuration.insert().values(
+                deployment_id=deployment_id,
+                key=key,
+                value=None if secret else value,
+                secret=secret,
+                secret_reference=f"secret-ref:{key}" if secret else None,
+                source=source,
+            )
+        )
+
+
 def seed_release(
     engine,
     *,
@@ -164,13 +186,21 @@ def seed_release(
     supported_operations: dict | None = None,
     accepted_installed_versions: list[str] | None = None,
     storage_state: str = "AVAILABLE",
+    configuration_inputs: list[dict] | None = None,
+    docker_images: list[dict] | None = None,
+    database: dict | None = None,
+    verification_checks: list[str] | None = None,
 ) -> str:
     """Inserts a `releases` (+ `release_storage`) row directly, with a
     hand-built manifest, bypassing `release_import.import_release`
     entirely. `PL4`'s decision logic only cares about Registry state, not
     how a Release got there — this lets each test exercise an exact
     `supported_operations`/`transition` combination without needing a
-    dedicated Golden Fixture directory per scenario.
+    dedicated Golden Fixture directory per scenario. `PL5` extends this
+    with `configuration_inputs`/`docker_images`/`database`/
+    `verification_checks` for the same reason — planning logic needs
+    precise, varied declarations that a single Golden Fixture can't all
+    provide at once.
     """
     release_id = str(uuid.uuid4())
     manifest = {
@@ -190,6 +220,19 @@ def seed_release(
             "entrypoints": {},
             "supported_operations": supported_operations or {"fresh_install": True},
             "transition": {"accepted_installed_versions": accepted_installed_versions} if accepted_installed_versions else {},
+        },
+        "configuration": {
+            "template": "configuration/app.env.template",
+            "inputs": configuration_inputs if configuration_inputs is not None else [],
+        },
+        "docker": {
+            "compose_file": "compose/docker-compose.yml",
+            "images": docker_images if docker_images is not None else [{"service": "backend", "repository": "seeded-app-backend", "tag": version, "archive": "docker-images/backend.tar", "required": True}],
+        },
+        "database": database if database is not None else {"required": False},
+        "verification": {
+            "entrypoint": "verify_deployment.sh",
+            "required_checks": verification_checks if verification_checks is not None else ["docker_services"],
         },
     }
     now = datetime.now(timezone.utc)

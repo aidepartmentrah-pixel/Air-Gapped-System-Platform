@@ -11,7 +11,14 @@ adds `deployments` and `applications.active_deployment_id` (migration
 read from, per §5.14's `operation_id`/`deployment_id` distinction. No
 real installation exists until `PL6`, so nothing writes `deployments` for
 real yet; `PL4`'s own tests seed it directly to exercise the
-already-installed decision paths.
+already-installed decision paths. PL5 adds `deployment_configuration`
+(migration `0006`) — the persisted, deployment-specific configuration
+values that `prepare_update`'s "preserve existing configuration" (§7.15
+Configuration Preservation Rule) reads from. Secret values are never
+stored in plaintext here: `value` stays null for `secret=true` rows,
+`secret_reference` holds a stand-in only (§7.16 Secret-State Rule — "the
+Operational Registry may store: Secret exists, Secret reference, Secret
+source", never the real value).
 
 Plain SQLAlchemy Core `Table` objects, not the ORM — access patterns so
 far are simple enough (a handful of inserts/selects per call) that a
@@ -141,6 +148,21 @@ deployments = sa.Table(
     ),
     sa.Column("verification_status", sa.String, nullable=True),
     sa.Column("deployed_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+deployment_configuration = sa.Table(
+    "deployment_configuration",
+    metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column(
+        "deployment_id", UUID(as_uuid=False), sa.ForeignKey("deployments.deployment_id"), nullable=False
+    ),
+    sa.Column("key", sa.String, nullable=False),
+    sa.Column("value", sa.String, nullable=True),
+    sa.Column("secret", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("secret_reference", sa.String, nullable=True),
+    sa.Column("source", sa.String, nullable=False),
+    sa.UniqueConstraint("deployment_id", "key", name="uq_deployment_configuration_deployment_key"),
 )
 
 release_storage = sa.Table(

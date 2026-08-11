@@ -1,9 +1,9 @@
-"""The RAH Offline Installation Platform backend — PL0-PL4.
+"""The RAH Offline Installation Platform backend — PL0-PL5.
 
 Health (PL0), the Generic Operation Framework (PL1), Release Discovery
-(PL2), Release Import & Registry (PL3), and Application State & Action
-Intelligence (PL4) so far. Every endpoint returns the common API response
-envelope (§5.2).
+(PL2), Release Import & Registry (PL3), Application State & Action
+Intelligence (PL4), and Deployment Planning & Configuration (PL5) so far.
+Every endpoint returns the common API response envelope (§5.2).
 """
 
 from __future__ import annotations
@@ -16,7 +16,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from rah_platform import application_query, db, health, operations, release_discovery, release_import
+from rah_platform import (
+    application_query,
+    db,
+    deployment_planning,
+    health,
+    operations,
+    release_discovery,
+    release_import,
+)
 from rah_platform.config import Config
 from rah_platform.envelope import error_envelope, success_envelope
 from rah_platform.errors import InternalError, PlatformError, RequestValidationFailedError
@@ -49,6 +57,46 @@ class ImportReleaseRequest(BaseModel):
 
     requested_by: str = "operator:unknown"
     expected_fingerprint: str | None = None
+
+
+class PrepareUpdateRequest(BaseModel):
+    """Matches architecture §4.10 — `application_id` comes from the URL
+    path, not this body; the client supplies only the target."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_release_id: str
+
+
+class ConfigurationInputValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: object | None = None
+
+
+class ValidateDeploymentInputsRequest(BaseModel):
+    """Matches architecture §4.7. `release_id` comes from the URL path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    configuration: dict[str, ConfigurationInputValue] = {}
+
+
+class SuggestAvailablePortsRequest(BaseModel):
+    """Matches architecture §4.8 exactly. `exclude_application_id` is
+    accepted for schema parity but unused — no notion of "ports already
+    committed to another application's plan" exists yet, since nothing
+    persists a plan until it's acted on (no such action exists before
+    `PL6`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = 1
+    minimum: int = 1024
+    maximum: int = 65535
+    preferred_ports: list[int] = []
+    exclude_application_id: str | None = None
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -149,6 +197,34 @@ def create_app(config: Config | None = None) -> FastAPI:
         return success_envelope(
             application_query.get_available_actions(
                 app.state.db_engine, application_id, target_release_id=target_release_id
+            )
+        )
+
+    @app.post("/api/v1/releases/{release_id}/installation-plan")
+    async def prepare_installation(release_id: str):
+        return success_envelope(deployment_planning.prepare_installation(app.state.db_engine, release_id))
+
+    @app.post("/api/v1/applications/{application_id}/update-plan")
+    async def prepare_update(application_id: str, request: PrepareUpdateRequest):
+        return success_envelope(
+            deployment_planning.prepare_update(app.state.db_engine, application_id, request.target_release_id)
+        )
+
+    @app.post("/api/v1/releases/{release_id}/validate-inputs")
+    async def validate_deployment_inputs(release_id: str, request: ValidateDeploymentInputsRequest = ValidateDeploymentInputsRequest()):
+        configuration = {k: v.model_dump() for k, v in request.configuration.items()}
+        return success_envelope(
+            deployment_planning.validate_deployment_inputs(app.state.db_engine, release_id, configuration)
+        )
+
+    @app.post("/api/v1/host/ports/suggestions")
+    async def suggest_available_ports(request: SuggestAvailablePortsRequest = SuggestAvailablePortsRequest()):
+        return success_envelope(
+            deployment_planning.suggest_available_ports(
+                count=request.count,
+                minimum=request.minimum,
+                maximum=request.maximum,
+                preferred_ports=request.preferred_ports,
             )
         )
 
