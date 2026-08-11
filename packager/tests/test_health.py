@@ -114,4 +114,4 @@ def test_docker_unavailable_raises_packager_error(monkeypatch):
     with pytest.raises(DockerUnavailableError) as exc_info:
         run_health_check(config)
 
-    assert exc_info.value.code == "PKG-RUNTIME-DOCKER-UNAVAILABLE"
+    assert exc_info.value.code == "PKG-DOCKER-UNAVAILABLE"

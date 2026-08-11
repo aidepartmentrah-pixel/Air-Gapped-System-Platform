@@ -25,7 +25,7 @@ Known, deliberate scope gaps (not silently papered over):
   with only a prebuilt `image:` reference (no `build:` key) has no
   exported archive in this Packager version and is not represented in
   the manifest at all — see `docker_build.py`'s own scope note.
-- Model artifacts: `PKG-RELEASE-MODELS-NOT-SUPPORTED` if any are
+- Model artifacts: `PKG-MANIFEST-MODELS-NOT-SUPPORTED` if any are
   declared — see `release_manifest.py`.
 - Script/documentation/verification file destinations flatten to
   basename (`scripts/{basename}`, not the original source-relative

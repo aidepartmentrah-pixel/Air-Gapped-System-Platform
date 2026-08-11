@@ -99,7 +99,7 @@ def test_missing_verification_entrypoint_blocks_manifest():
 
     with pytest.raises(ReleaseManifestIncompleteError) as exc_info:
         check_answers_sufficient_for_manifest(answers)
-    assert exc_info.value.code == "PKG-RELEASE-MANIFEST-INCOMPLETE"
+    assert exc_info.value.code == "PKG-MANIFEST-INCOMPLETE"
 
 
 def test_configuration_inputs_without_template_blocks_manifest():
@@ -147,7 +147,7 @@ def test_declared_model_artifacts_not_supported():
 
     with pytest.raises(ReleaseModelArtifactsNotSupportedError) as exc_info:
         check_answers_sufficient_for_manifest(answers)
-    assert exc_info.value.code == "PKG-RELEASE-MODELS-NOT-SUPPORTED"
+    assert exc_info.value.code == "PKG-MANIFEST-MODELS-NOT-SUPPORTED"
 
 
 # --- build_release_manifest ---
@@ -239,4 +239,4 @@ def test_no_images_fails_manifest_schema_minitems():
 
     with pytest.raises(ReleaseManifestSchemaError) as exc_info:
         validate_release_manifest(manifest)
-    assert exc_info.value.code == "PKG-RELEASE-MANIFEST-SCHEMA-INVALID"
+    assert exc_info.value.code == "PKG-MANIFEST-SCHEMA-INVALID"

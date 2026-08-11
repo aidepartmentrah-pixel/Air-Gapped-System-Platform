@@ -369,42 +369,67 @@ corrupting version history").
 - **Packager operational error-code namespace** (e.g. `PKG-*`, distinct
   from the Contract's `RC-*` validation-rule namespace) — covering Git
   inspection, Docker discovery, Claude interaction, configuration, and
-  runtime failures. Real gap, deliberately not designed yet — needs its
-  own small architectural discussion before Packager `P0`/`P5`
-  implementation needs it. See
+  runtime failures. Full namespace design (numbered sub-codes, a complete
+  category list, etc.) is still deliberately not started. See
   `docs/development/Period A — Independent Product Development;
   Packager/1. Initial GPT Proposal.md` (P5, where `PKG-DOCKER-*` is
   referenced as if it already exists).
 
-  Concrete gaps observed while reading the implementation so far, worth
-  folding into that eventual discussion rather than fixing piecemeal now:
-  - `errors.py`'s `DockerUnavailableError` uses code
-    `PKG-RUNTIME-DOCKER-UNAVAILABLE`. `RUNTIME` is not one of the 11
-    categories the architecture actually names (`4.6. Stage 4 —
-    Packaging Engine Specification.md` §9: `PKG-INPUT`, `PKG-PROJECT`,
-    `PKG-GIT`, `PKG-CLAUDE`, `PKG-DOCKER`, `PKG-MANIFEST`,
-    `PKG-CONTRACT`, `PKG-ARTIFACT`, `PKG-FILESYSTEM`, `PKG-FINALIZE`,
-    `PKG-INTERNAL`). Every other implemented error code does use one of
-    the 11. This one looks like an un-reconciled outlier from P0, not a
-    deliberate choice — worth deciding whether it becomes `PKG-DOCKER-*`
-    or `PKG-INTERNAL-*` when the namespace is actually designed.
-  - The architecture's §9 error object example has 7 fields (`code`,
-    `category`, `stage`, `message`, `details`, `retryable`,
-    `log_reference`). `PackagerError.to_dict()` currently only emits
-    `{code, message}` — `category`/`stage`/`details`/`retryable`/
-    `log_reference` are all unimplemented. Fine for now since nothing
-    downstream needs them yet, but the richer shape was designed and
-    never built, not rejected.
-  - §8's CLI exit-code table (`2`–`10`, one per failure category) is not
-    wired into `cli.py` — every command currently calls `sys.exit(1)` on
-    any `PackagerError`, regardless of category. Same status as above:
-    designed, not implemented, not yet needed by anything.
-  - P6 added a second outlier alongside `PKG-RUNTIME-*`: its four new
-    error codes use `PKG-RELEASE-MANIFEST-*`/`PKG-RELEASE-MODELS-*`
-    rather than the architecture's own named `PKG-MANIFEST` category.
-    Same reasoning as `PKG-RUNTIME-*` — a real, identified failure mode
-    needed a code now; which category prefix it should carry is a
-    namespace-design decision, not something to guess mid-slice.
+  **Partial reconciliation done** (before starting the Real Manual
+  Acceptance Test): of the four concrete gaps this bullet used to list,
+  two were category-naming outliers that were fixed outright, narrowly
+  scoped to just those two — no broader namespace redesign attempted:
+  - `DockerUnavailableError`: `PKG-RUNTIME-DOCKER-UNAVAILABLE` →
+    `PKG-DOCKER-UNAVAILABLE` (`RUNTIME` was never one of the architecture's
+    11 named categories; `DOCKER` already existed and fits).
+  - The three P6 manifest/model errors: `PKG-RELEASE-MANIFEST-SCHEMA-INVALID`
+    → `PKG-MANIFEST-SCHEMA-INVALID`, `PKG-RELEASE-MANIFEST-INCOMPLETE` →
+    `PKG-MANIFEST-INCOMPLETE`, `PKG-RELEASE-MODELS-NOT-SUPPORTED` →
+    `PKG-MANIFEST-MODELS-NOT-SUPPORTED` (folded into the architecture's own
+    named `PKG-MANIFEST` category instead of the ad hoc `PKG-RELEASE-*`
+    prefix). `errors.py`, `cli.py`-adjacent tests (`test_cli.py`,
+    `test_health.py`, `test_release_manifest.py`), and the one source
+    comment in `construct_release.py` referencing the old string were all
+    updated together; 169/169 tests still pass.
+
+  **New finding surfaced while doing that reconciliation, deliberately
+  NOT fixed this pass** (scoped narrowly to the two items above, per
+  explicit instruction — recording it so it doesn't silently vanish the
+  way the first two outliers almost did): auditing every implemented code's
+  category segment against the real 11-category list turned up two more
+  non-conforming groups that were never on this list before —
+  `PlanProjectNotInitializedError`/`PlanDirtySourceError`/
+  `PlanDuplicateVersionError` (`PKG-PLAN-*`) and
+  `ReleaseNotFoundError`/`ReleaseComplianceFailedError`/
+  `ReleaseAlreadyExistsError`/`ComplianceReportSchemaError`
+  (`PKG-RELEASE-*`/`PKG-COMPLIANCE-*`). None of `PLAN`, `RELEASE`, or
+  `COMPLIANCE` is one of the architecture's 11 named categories either.
+  These are real candidates for the eventual full namespace design
+  discussion (`ReleaseComplianceFailedError` in particular looks like it
+  should be `PKG-CONTRACT-*`, since RC-* rule failure is literally what
+  exit code `7`, "Release Contract validation failure," means) — left
+  alone here rather than guessed at mid-cleanup.
+
+  **Decision on the other two original items — richer error shape and
+  differentiated exit codes — deferred for V1, not implemented**, for a
+  reason that only became clear from the finding above: `PackagerError.to_dict()`
+  still only emits `{code, message}` (not the architecture §9 7-field shape:
+  `category`/`stage`/`details`/`retryable`/`log_reference`), and §8's
+  CLI exit-code table (`2`–`10`) is still not wired into `cli.py` (every
+  command still exits `1` on any `PackagerError`). Building either one now
+  would require a `code → category`/`code → exit-code` lookup, and that
+  lookup can't be built soundly yet — the namespace is still only
+  partially reconciled (`PLAN`/`RELEASE`/`COMPLIANCE` remain unmapped, per
+  above), so shipping the lookup now means either solving the full
+  namespace design task immediately (explicitly out of scope for this
+  pass) or shipping mappings already known to be wrong for several error
+  classes. Neither is better than waiting. `log_reference` separately
+  assumes a per-operation log-file feature that doesn't exist yet
+  (logging is stderr-only). No downstream consumer needs any of these five
+  fields yet, so nothing is blocked by deferring. Revisit this whole bullet
+  together, as one pass, once/if the namespace is actually designed —
+  piecemeal fixes are what created the `PLAN`/`RELEASE`/`COMPLIANCE` gap in
+  the first place.
 
 - **Period C must inherit the mocked-vs-live testing discipline already
   proven in `P3`, not silently drop it.** `packager/tests/test_claude_client.py`
