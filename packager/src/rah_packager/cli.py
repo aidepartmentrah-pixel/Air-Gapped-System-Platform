@@ -17,6 +17,7 @@ from rah_packager.config import Config
 from rah_packager.construct_release import construct_release
 from rah_packager.docker_build import build_release_images
 from rah_packager.errors import PackagerError
+from rah_packager.finalize_release import package_release
 from rah_packager.health import run_health_check
 from rah_packager.inspection import inspect_project
 from rah_packager.logging_config import configure_logging
@@ -25,6 +26,7 @@ from rah_packager.project_state import DEFAULT_INITIAL_VERSION, init_project
 from rah_packager.release_plan import prepare_plan
 from rah_packager.result import failure, ok, render
 from rah_packager.validate_answers import validate_answers
+from rah_packager.validate_release import validate_release
 
 
 @click.group()
@@ -268,6 +270,81 @@ def construct(
         click.echo(render(failure("construct", exc)))
         sys.exit(1)
     click.echo(render(ok("construct", data)))
+
+
+@main.command(name="package")
+@click.option(
+    "--project",
+    "project_path",
+    required=True,
+    type=click.Path(),
+    help="Path to the application repository to package a Release for.",
+)
+@click.option(
+    "--output",
+    "output_dir",
+    required=True,
+    type=click.Path(),
+    help="Directory the finalized Release directory is created under.",
+)
+@click.option(
+    "--increment",
+    "increment",
+    default="patch",
+    type=click.Choice(["patch", "minor", "major"]),
+    show_default=True,
+    help="Version increment to propose (ignored before the first Release).",
+)
+@click.option(
+    "--answers",
+    "answers_path",
+    default=None,
+    type=click.Path(),
+    help="Path to engineering-answers.json (defaults to <project>/.rah/engineering-answers.json).",
+)
+@click.option("--summary", "summary", default=None, help="Release summary (defaults to a generic one).")
+def package(
+    project_path: str, output_dir: str, increment: str, answers_path: str | None, summary: str | None
+) -> None:
+    """Build, validate, and finalize a complete Release in one step: real
+    Docker builds, every RC-* compliance rule, checksums, a Compliance
+    Report, and a Project Version State update — only after everything
+    else has succeeded.
+    """
+    try:
+        data = package_release(project_path, output_dir, increment, answers_path, summary)
+    except PackagerError as exc:
+        click.echo(render(failure("package", exc)))
+        sys.exit(1)
+    click.echo(render(ok("package", data)))
+
+
+@main.command(name="validate")
+@click.option(
+    "--release",
+    "release_path",
+    required=True,
+    type=click.Path(),
+    help="Path to a Release directory to independently validate.",
+)
+@click.option(
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(),
+    help="Optional path to the source project, for identity cross-checks against Project Version State.",
+)
+def validate(release_path: str, project_path: str | None) -> None:
+    """Independently re-validate a Release directory: every RC-* rule
+    plus a full checksum re-verification. Read-only — never modifies
+    anything.
+    """
+    try:
+        data = validate_release(release_path, project_path)
+    except PackagerError as exc:
+        click.echo(render(failure("validate", exc)))
+        sys.exit(1)
+    click.echo(render(ok("validate", data)))
 
 
 if __name__ == "__main__":

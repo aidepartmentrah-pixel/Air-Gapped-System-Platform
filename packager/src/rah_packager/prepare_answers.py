@@ -244,7 +244,7 @@ def _call_claude_for_answers(context_text: str, api_key: str) -> dict:
 
 def _write_answers_atomically(answers_path: Path, answers: dict) -> None:
     """Same tmp-write, validate, atomic-replace pattern as
-    project_state.py's `_write_state_atomically` — the real file is never
+    project_state.py's `write_state_atomically` — the real file is never
     observed partially written or invalid.
     """
     tmp_path = answers_path.with_name(answers_path.name + ".tmp")
