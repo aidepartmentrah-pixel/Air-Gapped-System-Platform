@@ -199,6 +199,20 @@ def construct_release(
     if release_dir.exists():
         shutil.rmtree(release_dir)
 
+    # Every layout-required directory exists from the start, even ones
+    # this slice never populates (checksums/, compliance/ — P7's job) —
+    # RC-DIR-003 checks for their presence regardless of finalization
+    # state, and configuration/ is unconditionally required by the
+    # layout Contract even when this app has no template to copy into it.
+    mandatory_dirs = [
+        "compose", "docker-images", "scripts", "configuration",
+        "documentation", "verification", "checksums", "compliance",
+    ]
+    if answers["database"]["required"]:
+        mandatory_dirs.append("database")
+    for dirname in mandatory_dirs:
+        (release_dir / dirname).mkdir(parents=True, exist_ok=True)
+
     build_result = build_release_images(path, application["slug"], version, release_dir)
     docker_images = [
         {

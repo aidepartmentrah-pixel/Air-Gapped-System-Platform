@@ -168,10 +168,12 @@ def validate_state(state: dict) -> None:
         raise ProjectStateSchemaError(exc.message) from exc
 
 
-def _write_state_atomically(state_path: Path, state: dict) -> None:
+def write_state_atomically(state_path: Path, state: dict) -> None:
     """§14 Write Safety: write `.tmp`, validate it, replace atomically.
     `state_path` itself is only ever touched by the final `os.replace`, so a
     failure at any earlier step leaves no trace on the real filename.
+    Public: also used by P7's finalization (`finalize_release.py`) to
+    append to `release_history` after a Release finalizes successfully.
     """
     tmp_path = state_path.with_name(state_path.name + ".tmp")
     payload = json.dumps(state, indent=2, sort_keys=True) + "\n"
@@ -195,7 +197,7 @@ def init_project(
 ) -> dict:
     """`rah init`. Raises a PackagerError subclass on any failure; never
     leaves a malformed `.rah/project-state.json` behind (see
-    `_write_state_atomically`).
+    `write_state_atomically`).
     """
     path = validate_project_path(project_path)
     require_git_repository(path)
@@ -207,7 +209,7 @@ def init_project(
     _validate_identity(name, slug, initial_version)
 
     state = build_initial_state(name, slug, initial_version)
-    _write_state_atomically(state_path, state)
+    write_state_atomically(state_path, state)
 
     return {
         "application": state["application"],

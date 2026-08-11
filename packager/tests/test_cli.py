@@ -524,3 +524,125 @@ def test_construct_command_returns_valid_json_envelope(tmp_path):
             docker.from_env().images.remove(f"rah-{slug}-app:1.0.0", force=True)
         except docker.errors.ImageNotFound:
             pass
+
+
+# --- `rah package` / `rah validate` (P7, real Docker build against the real Engine) ---
+
+
+def _setup_cli_package_project(project: Path, slug: str, name: str):
+    from rah_packager.engineering_answers import compute_inspection_fingerprint
+    from rah_packager.inspection import inspect_project
+    from rah_packager.project_state import build_initial_state, project_state_path
+    from rah_packager.validate_answers import default_answers_path
+
+    project.mkdir()
+    (project / "scripts").mkdir()
+    install = project / "scripts" / "install_offline.sh"
+    install.write_text("#!/bin/sh\necho install\n")
+    install.chmod(0o755)
+    verify = project / "scripts" / "verify_installation.sh"
+    verify.write_text("#!/bin/sh\necho verify\n")
+    verify.chmod(0o755)
+    (project / "RELEASE_NOTES.md").write_text("# Release Notes")
+    (project / "app").mkdir()
+    (project / "app" / "Dockerfile").write_text("FROM scratch\nCOPY hello.txt /hello.txt\n")
+    (project / "app" / "hello.txt").write_text("hello\n")
+    (project / "docker-compose.yml").write_text(
+        "services:\n  app:\n    build:\n      context: ./app\n      dockerfile: Dockerfile\n"
+    )
+    subprocess.run(["git", "init", "--quiet", "-b", "main"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=project, check=True)
+    subprocess.run(["git", "add", "."], cwd=project, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "init"], cwd=project, check=True)
+
+    state = build_initial_state(name, slug, "1.0.0")
+    state_path = project_state_path(project)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state))
+
+    inspection_result = inspect_project(project)
+    answers = {
+        "schema_version": "1.0",
+        "based_on": {
+            "git_commit": inspection_result["git"]["commit"],
+            "inspection_fingerprint": compute_inspection_fingerprint(inspection_result),
+        },
+        "application": {"description": "A CLI package-command test application."},
+        "compatibility": {"minimum_rah_oip_version": "1.0", "supported_architectures": ["amd64"]},
+        "deployment": {
+            "entrypoints": {
+                "install": "scripts/install_offline.sh",
+                "verify": "scripts/verify_installation.sh",
+            },
+            "supported_operations": {"fresh_install": True, "downgrade": False},
+        },
+        "configuration": {"inputs": []},
+        "database": {"required": False},
+        "persistent_state": {"preserve_during_update": []},
+        "offline_requirements": {
+            "public_internet_required": False,
+            "public_registry_required": False,
+            "public_cdn_required": False,
+            "online_model_registry_required": False,
+        },
+        "models": {"required": False},
+        "client": {"preparation_required": False, "https_required": False},
+        "verification": {"entrypoint": "scripts/verify_installation.sh", "required_checks": ["health"]},
+        "documentation": {
+            "release_notes": "RELEASE_NOTES.md",
+            "installation": "RELEASE_NOTES.md",
+            "update": "RELEASE_NOTES.md",
+            "recovery": "RELEASE_NOTES.md",
+            "known_issues": "RELEASE_NOTES.md",
+        },
+    }
+    answers_path = default_answers_path(project)
+    answers_path.parent.mkdir(parents=True, exist_ok=True)
+    answers_path.write_text(json.dumps(answers))
+
+
+def test_package_and_validate_commands_return_valid_json_envelopes(tmp_path):
+    slug = "cli-package-app"
+    project = tmp_path / "project"
+    _setup_cli_package_project(project, slug, "CLI Package App")
+    output_dir = tmp_path / "output"
+
+    try:
+        runner = CliRunner()
+        result, envelope = _invoke_json(
+            runner, ["package", "--project", str(project), "--output", str(output_dir)]
+        )
+
+        assert result.exit_code == 0
+        assert envelope["ok"] is True
+        assert envelope["command"] == "package"
+        assert envelope["result"]["overall_result"] == "PASS"
+        assert envelope["result"]["release_fingerprint"].startswith("sha256:")
+        release_dir = envelope["result"]["release_directory"]
+
+        validate_result, validate_envelope = _invoke_json(
+            runner, ["validate", "--release", release_dir, "--project", str(project)]
+        )
+
+        assert validate_result.exit_code == 0
+        assert validate_envelope["ok"] is True
+        assert validate_envelope["result"]["overall_result"] == "PASS"
+        assert validate_envelope["result"]["checksum_mismatches"] == []
+    finally:
+        try:
+            docker.from_env().images.remove(f"rah-{slug}-app:1.0.0", force=True)
+        except docker.errors.ImageNotFound:
+            pass
+
+
+def test_validate_command_reports_structured_error_for_missing_release(tmp_path):
+    runner = CliRunner()
+    result, envelope = _invoke_json(
+        runner, ["validate", "--release", str(tmp_path / "nowhere")]
+    )
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit), "unexpected crash, not a controlled exit"
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "PKG-RELEASE-NOT-FOUND"

@@ -388,6 +388,77 @@ class DockerImageExportError(PackagerError):
         self.service = service
 
 
+class ComplianceReportSchemaError(PackagerError):
+    """A generated Compliance Report failed schema validation against the
+    real, frozen `contracts/1.0/compliance-report.schema.json`. Defensive
+    — the Packager itself constructs the report.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(
+            code="PKG-COMPLIANCE-REPORT-SCHEMA-INVALID",
+            message=f"Generated Compliance Report failed schema validation: {detail}",
+        )
+
+
+class ReleaseNotFoundError(PackagerError):
+    """`--release` does not point at a directory containing a
+    `release.yaml` — nothing to validate.
+    """
+
+    def __init__(self, path: str):
+        super().__init__(
+            code="PKG-RELEASE-NOT-FOUND",
+            message=f"No release.yaml found at {path} — nothing to validate.",
+        )
+
+
+class ReleaseComplianceFailedError(PackagerError):
+    """One or more mandatory RC-* rules failed — the candidate cannot be
+    finalized. Carries every failed rule, not just the first, matching
+    the Validator's own "continue and report every discoverable
+    violation in one run" requirement (validation-rules.json,
+    `fatal_failure_rule`).
+    """
+
+    def __init__(self, failed_rules: list[dict]):
+        summary = "; ".join(f"{r['id']}: {r['message']}" for r in failed_rules)
+        super().__init__(
+            code="PKG-RELEASE-COMPLIANCE-FAILED",
+            message=f"Release failed compliance validation: {summary}",
+        )
+        self.failed_rules = failed_rules
+
+    def to_dict(self) -> dict:
+        result = super().to_dict()
+        result["failed_rules"] = self.failed_rules
+        return result
+
+
+class ReleaseAlreadyExistsError(PackagerError):
+    """A finalized Release already exists at the same version — never
+    silently overwritten (P7's "Existing Final Release" test).
+    """
+
+    def __init__(self, path: str):
+        super().__init__(
+            code="PKG-RELEASE-ALREADY-EXISTS",
+            message=f"A finalized Release already exists at {path} — refusing to overwrite it.",
+        )
+
+
+class ReleaseFinalizationWriteError(PackagerError):
+    """Checksum generation, Compliance Report writing, or the final
+    candidate-to-immutable move failed at the filesystem level.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(
+            code="PKG-FILESYSTEM-RELEASE-FINALIZATION-FAILED",
+            message=f"Could not finalize the Release: {detail}",
+        )
+
+
 class EngineeringAnswersWriteError(PackagerError):
     """Writing or atomically replacing `.rah/engineering-answers.json`
     failed at the filesystem level (disk full, permissions, etc).

@@ -3,11 +3,13 @@
 ## Current Phase
 
 Period A, Packager track. Release Contract V1 is **FROZEN** (user-confirmed).
-Packager `P0`–`P6` are all done — `P6` (Release Construction) finished
-with `rah construct` built, tested, and live-proven with real candidate
-Releases against both real acceptance apps (HCopilot and Indicator).
-`P7` (Validation, Finalization and Independent Offline Proof) is next —
-the Period A Packager finish line.
+Packager `P0`–`P7` are automated-portion-done — `P7` (Validation,
+Finalization and Independent Offline Proof) finished `rah package`/
+`rah validate` (56 RC-* rules, checksums, Compliance Report, atomic
+finalization), built, tested, and live-proven against the real built
+container and real HCopilot. **Remaining**: the Real Manual Acceptance
+Test itself (copy a finalized Release to a real Offline Debian VM,
+install, verify) — not yet scoped with the user.
 
 ## Architecture
 
@@ -120,8 +122,42 @@ every line ending in a `git clone`d repo, making every file look
 documented as a real environmental gap (extends P0's "container-only"
 finding to Git behavior, not just Docker connectivity), worked around
 per-repo via `git config core.autocrlf true` + `git checkout -- .` run
-from inside the container. See `docs/development/Period A — Independent
-Product Development; Packager/2. Initial Slicing Task Table.md`.
+from inside the container.
+**P7 AUTOMATED PORTION DONE** (Validation, Finalization and Independent
+Offline Proof — the Period A Packager finish line's automated half).
+`rah package` turns a P6 candidate into a finalized Release: all 56
+mandatory RC-* rules from `validation-rules.json` (everything except
+`RC-REPRO-001`, which the Contract itself excludes from
+`validation_order` — a build-time regression check comparing two
+candidates, covered by P6's own reproducibility test instead), checksums
+(`checksums.py`, sha256sum-CLI-compatible, plus a Release fingerprint —
+COMPLETED as sha256 of `release.yaml`'s own bytes to avoid a circular
+dependency against RC-INT-004's mandated closure order), a Compliance
+Report (`compliance_report.py`, schema embedded verbatim with the same
+drift test as P6's manifest), and a Project Version State update that
+happens only after everything else succeeds. `rah validate`
+independently re-validates any Release directory afterward, no source
+project required. 33 new tests, 169/169 total pass, all real Docker
+builds. Live-proven against the real built container: a minimal fixture
+through a full `rah package` → `rah validate` round trip including real
+post-finalization tampering correctly detected as `FAIL` and a real
+read-only re-validation degrading gracefully; then real HCopilot end to
+end, surfacing three real bugs (P6 itself missing required directories;
+two RC-* rules checking closure-generated files too early; an OCI-format
+Docker archive assumption; a placeholder-detection false positive on a
+real `.env.offline.template`) and two real Windows-bind-mount findings
+(executable bits not propagating through `git checkout` at
+`core.fileMode=false`; `core.autocrlf=true` fixing `git status` but not
+actually producing LF content, refining rather than reversing the
+earlier P4/P6 CRLF finding) — all fixed at their root cause. Final,
+clean HCopilot run: every rule passes except the already-documented
+`RC-OFF-002` (prebuilt base images like `sqlserver` aren't bundled
+offline, a known P5/P6 scope gap) — correctly and honestly rejected, not
+papered over. **Not yet done**: the Real Manual Acceptance Test itself
+(copy to a real Offline Debian VM, run `install_offline.sh`, verify
+manually) — needs explicit scoping with the user first. See
+`docs/development/Period A — Independent Product Development;
+Packager/2. Initial Slicing Task Table.md`.
 
 ## Period A — Platform
 
@@ -179,9 +215,11 @@ Status: NOT STARTED
    `rah init`), `P2` (Repository Inspection, `rah inspect`), `P3`
    (Claude Knowledge Bridge, `rah prepare-answers` + `rah validate-answers`),
    `P4` (Release Planning, `rah plan`), `P5` (Docker Build and
-   Artifact Preparation, `rah build`), and `P6` (Release Construction,
-   `rah construct`) all done and tested. `P7` (Validation, Finalization
-   and Independent Offline Proof) is next. See
+   Artifact Preparation, `rah build`), `P6` (Release Construction,
+   `rah construct`), and `P7`'s automated portion (Validation and
+   Finalization, `rah package`/`rah validate`) all done and tested. The
+   Real Manual Acceptance Test (offline VM install) remains, needs
+   scoping with the user. See
    `docs/development/Period A — Independent Product Development;
    Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
@@ -248,20 +286,22 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-None. Packager `P0`–`P6` are all done. `P7` (Validation, Finalization and
-Independent Offline Proof) has no open design gap — the Compliance
-Report/checksum schemas it needs already exist as real, frozen files in
-`contracts/1.0/`. See the Master Development Matrix in the Slicing Task
-Table for its dependencies.
+None on further coding. `P7`'s automated portion (`rah package`/
+`rah validate`) is done. The remaining piece — the Real Manual Acceptance
+Test against a real Offline Debian VM — is blocked on scoping with the
+user: which VM/environment to use, which acceptance app, and whether to
+accept the known `RC-OFF-002` gap (prebuilt base images not bundled
+offline) for this proof or treat it as something to close first.
 
 ## Next Major Gate
 
-Packager `P7` (Validation, Finalization and Independent Offline Proof) —
-the Period A Packager finish line: `rah validate`/`rah package` turning a
-P6 candidate Release into a finalized, immutable Release (checksums,
-Compliance Report, Release fingerprint, Project Version State update
-only after finalization succeeds), then an independent offline
-qualification proof against a real offline VM.
+The Real Manual Acceptance Test: copy a real finalized Release to a real
+Offline Debian VM, run its own `install_offline.sh`, manually verify the
+application starts — the last piece of the Period A Packager Exit Gate
+("a real application can be initialized, inspected, assisted through
+Claude, planned, built, packaged, validated, finalized, manually
+installed offline, and a second Release can be produced without
+corrupting version history").
 
 ## Future Design Tasks (not yet started)
 
