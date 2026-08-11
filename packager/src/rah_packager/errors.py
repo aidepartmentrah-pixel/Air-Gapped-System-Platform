@@ -6,6 +6,37 @@ not extend this module into a numbered sub-code taxonomy without that
 discussion happening first. Each class here still only exists because a
 real, identified failure mode needed a deterministic code — not because
 the category slot existed in the architecture's list.
+
+Reconciliation pass (pre-P7 Real Manual Acceptance Test): two outliers
+recorded in CURRENT.md were folded back into the architecture's 11 named
+categories — `DockerUnavailableError` (`PKG-RUNTIME-*` -> `PKG-DOCKER-*`)
+and the three P6 manifest/model errors (`PKG-RELEASE-MANIFEST-*` /
+`PKG-RELEASE-MODELS-*` -> `PKG-MANIFEST-*`). While doing that reconciliation,
+more of the same problem turned up than the recorded note named:
+`PlanProjectNotInitializedError`/`PlanDirtySourceError`/
+`PlanDuplicateVersionError` all use `PKG-PLAN-*`, and
+`ReleaseNotFoundError`/`ReleaseComplianceFailedError`/
+`ReleaseAlreadyExistsError`/`ComplianceReportSchemaError` use
+`PKG-RELEASE-*`/`PKG-COMPLIANCE-*` — none of which is one of the 11 named
+categories either. Deliberately NOT touched in this pass: the user scoped
+this reconciliation narrowly to the two outliers already on record, and
+fixing these too would mean doing the full namespace design discussion
+that's explicitly still deferred. Recorded here, and in CURRENT.md, so
+this doesn't silently disappear the way the first two outliers almost did.
+
+Decision on the other two items in the same CURRENT.md note (the 7-field
+error object shape from architecture §9, and the §8 CLI exit-code table):
+deferred for V1, not implemented. Reasoning: (1) no downstream consumer
+reads `category`/`stage`/`retryable`/`log_reference` yet; (2) `category`
+in particular can't be derived soundly from `code` right now, because — as
+just discovered above — the namespace itself is only partially reconciled
+(`PLAN`/`RELEASE`/`COMPLIANCE` still don't map to a real category), so a
+code -> category/exit-code lookup built today would either have to solve
+that full problem now (out of scope this pass) or ship known-wrong
+mappings for several error classes, which is worse than not building it;
+(3) `log_reference` additionally assumes a per-operation log-file feature
+that doesn't exist yet (logging is stderr-only). Revisit once the full
+namespace is designed.
 """
 
 from __future__ import annotations
@@ -35,7 +66,7 @@ class DockerUnavailableError(PackagerError):
 
     def __init__(self, detail: str):
         super().__init__(
-            code="PKG-RUNTIME-DOCKER-UNAVAILABLE",
+            code="PKG-DOCKER-UNAVAILABLE",
             message=f"Docker Engine is unavailable: {detail}",
         )
 
@@ -480,7 +511,7 @@ class ReleaseManifestSchemaError(PackagerError):
 
     def __init__(self, detail: str):
         super().__init__(
-            code="PKG-RELEASE-MANIFEST-SCHEMA-INVALID",
+            code="PKG-MANIFEST-SCHEMA-INVALID",
             message=f"Generated Release Manifest failed schema validation: {detail}",
         )
 
@@ -496,7 +527,7 @@ class ReleaseManifestIncompleteError(PackagerError):
 
     def __init__(self, detail: str):
         super().__init__(
-            code="PKG-RELEASE-MANIFEST-INCOMPLETE",
+            code="PKG-MANIFEST-INCOMPLETE",
             message=f"Engineering answers are not sufficient to construct a Release: {detail}",
         )
 
@@ -512,7 +543,7 @@ class ReleaseModelArtifactsNotSupportedError(PackagerError):
 
     def __init__(self):
         super().__init__(
-            code="PKG-RELEASE-MODELS-NOT-SUPPORTED",
+            code="PKG-MANIFEST-MODELS-NOT-SUPPORTED",
             message=(
                 "Constructing a Release with declared model artifacts is not yet "
                 "supported (matches HCAT's deferral — see CURRENT.md)."

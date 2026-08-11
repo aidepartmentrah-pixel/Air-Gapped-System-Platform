@@ -77,7 +77,7 @@ def test_health_command_reports_structured_error_when_docker_unavailable(monkeyp
     # proven by _invoke_json's json.loads succeeding above).
     assert isinstance(result.exception, SystemExit), "unexpected crash, not a controlled exit"
     assert envelope["ok"] is False
-    assert envelope["error"]["code"] == "PKG-RUNTIME-DOCKER-UNAVAILABLE"
+    assert envelope["error"]["code"] == "PKG-DOCKER-UNAVAILABLE"
 
 
 # --- `rah init` (P1) ---
