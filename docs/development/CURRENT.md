@@ -133,13 +133,22 @@ reasons; `PL3`/`PL4` each got one clarifying implementation note. No
 redesign, no new V1 capability. **`PL0` (Runtime, Database & Test
 Foundation) is DONE** — `platform/` (FastAPI + SQLAlchemy/Alembic +
 `docker` SDK), real Docker Compose deployment (backend + PostgreSQL 16) on
-this Online Debian VM, 21/21 tests pass, all 8 required proofs verified
-live against the real built container, including both failure paths
-(PostgreSQL stopped → `503`/`PLT-DATABASE-003` without a backend crash;
-Docker socket unmounted → `503`/`PLT-DOCKER-001`). Deliberately independent
-of the Packager track — no Packager output involved, only the
-`tests/fixtures/releases/` placeholder Golden-fixture directory the plan
-calls for. `PL1` (Generic Operation Framework) is next. See
+this Online Debian VM, all 8 required proofs verified live against the
+real built container, including both failure paths (PostgreSQL stopped →
+`503`/`PLT-DATABASE-003` without a backend crash; Docker socket unmounted
+→ `503`/`PLT-DOCKER-001`). **`PL1` (Generic Operation Framework) is DONE**
+— canonical `operations`/`operation_events`/`operation_logs` tables
+(migration `0002`), the application-operation lock enforced as a
+Postgres partial unique index (race-free by construction, not
+application-level locking logic), stale-operation detection, and
+`GET /api/v1/operations/{id}` + `.../events` + `.../logs`, all built
+against a synthetic test operation per the plan (no real Application/
+Release exists yet — that's `PL3`). 42/42 tests pass total, all 11
+required `PL1` proofs verified live against the real running Compose
+container. Deliberately independent of the Packager track throughout —
+no Packager output involved, only the `tests/fixtures/releases/`
+placeholder Golden-fixture directory the plan calls for. `PL2` (Release
+Discovery) is next. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -176,8 +185,8 @@ Status: NOT STARTED
    `docs/development/Period A — Independent Product Development;
    Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
-   Foundation) done and tested, `PL1` (Generic Operation Framework) next —
-   see
+   Foundation) and `PL1` (Generic Operation Framework) done and tested,
+   `PL2` (Release Discovery) next — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 
