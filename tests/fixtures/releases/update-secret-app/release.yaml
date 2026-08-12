@@ -1,0 +1,101 @@
+manifest_schema_version: '1.0'
+application:
+  name: Secret App
+  slug: secret-app
+  description: PL6 secret-handling fixture.
+release:
+  version: 1.1.0
+  created_at: '2026-08-11T00:00:00+00:00'
+  summary: "PL8a fixture \u2014 update target for update-secret-app, config/secret\
+    \ preservation."
+  release_type: application
+  engineering_state: awaiting_offline_qualification
+source:
+  repository: https://example.invalid/secret-app.git
+  git_commit: 0123456789abcdef0123456789abcdef01234567
+  git_tag: v1.0.0
+  source_dirty: false
+compatibility:
+  release_contract_version: '1.0'
+  minimum_rah_oip_version: 1.0.0
+  supported_architectures:
+  - amd64
+  required_shared_services: []
+deployment:
+  canonical_path: /opt/rah/apps/secret-app
+  compose_project_name: rah-secret-app
+  entrypoints:
+    install: install_offline.sh
+    verify: verify_deployment.sh
+    update: update_offline.sh
+    backup: backup_database.sh
+    restore: restore_database.sh
+  supported_operations:
+    fresh_install: true
+    update: true
+    downgrade: false
+    reinstall: false
+  transition:
+    accepted_installed_versions:
+    - 1.0.0
+configuration:
+  template: configuration/app.env.template
+  inputs:
+  - key: APP_PORT
+    label: Port
+    type: port
+    required: true
+    source: operator
+    default: 8501
+  - key: ADMIN_PASSWORD
+    label: Admin password
+    type: password
+    required: true
+    source: operator
+    secret: true
+docker:
+  compose_file: compose/docker-compose.yml
+  images:
+  - service: backend
+    repository: golden-test-app-backend
+    tag: 1.1.0
+    archive: docker-images/backend.tar
+    required: true
+database:
+  required: true
+  platform: sqlite
+  deployment_mode: application_managed
+  target_schema_version: 1.1.0
+  backup_before_update:
+    required: true
+    entrypoint: backup_database.sh
+  recovery:
+    entrypoint: restore_database.sh
+persistent_state:
+  preserve_during_update:
+  - production_configuration
+  - generated_credentials
+offline_requirements:
+  public_internet_required: false
+  public_registry_required: false
+  public_cdn_required: false
+  online_model_registry_required: false
+models:
+  required: false
+  artifacts: []
+client:
+  preparation_required: false
+  https_required: false
+verification:
+  entrypoint: verify_deployment.sh
+  required_checks:
+  - docker_services
+documentation:
+  release_notes: documentation/release-notes.md
+  installation: documentation/install.md
+  update: documentation/update.md
+  recovery: documentation/recovery.md
+  known_issues: documentation/known-issues.md
+integrity:
+  checksum_algorithm: sha256
+  checksum_file: checksums/SHA256SUMS

@@ -91,7 +91,7 @@ def _classify_input(input_decl: dict, preserved: dict | None) -> dict:
     return entry
 
 
-def _preserved_configuration(engine, deployment_id: str | None) -> dict:
+def preserved_configuration(engine, deployment_id: str | None) -> dict:
     """Non-secret preserved values, keyed by config key. Secret keys are
     tracked separately (`_preserved_secrets`) so they never pass through
     a plain dict that might get logged or echoed.
@@ -108,7 +108,7 @@ def _preserved_configuration(engine, deployment_id: str | None) -> dict:
     return {r["key"]: r["value"] for r in rows}
 
 
-def _preserved_secret_keys(engine, deployment_id: str | None) -> set[str]:
+def preserved_secret_keys(engine, deployment_id: str | None) -> set[str]:
     if not deployment_id:
         return set()
     with engine.connect() as conn:
@@ -211,9 +211,9 @@ def prepare_update(engine, application_id: str, target_release_id: str) -> dict:
         update_action = next(a for a in actions["actions"] if a["action"] == "UPDATE")
         blocking_issues.extend(update_action["blocking_reasons"])
 
-    preserved_values = _preserved_configuration(engine, active_deployment_id)
-    preserved_secret_keys = _preserved_secret_keys(engine, active_deployment_id)
-    configuration_inputs = _configuration_inputs(manifest, preserved_values, preserved_secret_keys)
+    preserved_values = preserved_configuration(engine, active_deployment_id)
+    preserved_secret_key_set = preserved_secret_keys(engine, active_deployment_id)
+    configuration_inputs = _configuration_inputs(manifest, preserved_values, preserved_secret_key_set)
 
     database = manifest.get("database", {})
     backup_decl = database.get("backup_before_update", {})

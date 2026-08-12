@@ -260,8 +260,64 @@ tests pass total, all 8 required `PL6` proofs verified live against the
 real running Compose container — including confirming the installed
 container from *outside* the backend container, on the real host's own
 Docker Engine, and `PL4`'s action logic correctly flipping to reflect a
-*real* installation for the first time, not seeded state. `PL7`
-(Verification and Host Reconciliation) is next. See
+*real* installation for the first time, not seeded state.
+**`PL7` (Verification and Host Reconciliation) is DONE** — `verification.py`
+completes the three-authority model (Manifest = expected, Registry =
+recorded, Host Inspection = observed). `PL6`'s `_minimal_verify()` is
+retired; `installation.py` now calls the same real `run_verification()`
+a standalone `POST .../verify` call uses, so the two paths can never
+diverge. Real check set: `release_identity`/`container_existence`/
+`container_health`/`image_tags`/`selected_port`/`offline_runtime`/
+`persistent_configuration` mandatory, `database_connectivity`/
+`migration_state`/`backend_health`/`frontend_reachability` honestly
+`NOT_APPLICABLE` unless a Release declares them required — never a
+fabricated `PASS`. New schema (migration `0007`): `verification_runs`/
+`verification_checks` (every run preserved independently, §7.25) and
+`reconciliations` (recorded drift, §7.27). Reconciliation logic reaches
+all five real states (`UNKNOWN`/`CONSISTENT`/`PARTIALLY_RUNNING`/
+`DRIFT_DETECTED`/`UNREACHABLE`) against genuine Docker state changes,
+not mocks. Two real bugs found and fixed before shipping: (1) a
+pre-existing, `PL6`-era fixture bug — `install-with-secret`'s manifest
+still declared the wrong image repository (only the Compose file was
+corrected back in `PL6-I02`) — caught by `PL7`'s own new `image_tags`
+check, not introduced by it; (2) `_resolve_expected_release` returned a
+deployment id instead of resolving the real release id, fixed with a
+dedicated regression test. One deliberate, flagged deviation from
+architecture's literal text: `POST .../verify` runs synchronously
+(`200`), not `202` + poll — verification is a handful of fast checks,
+not a long-running script. 143/143 tests pass total, all 9 required
+`PL7` proofs verified live against the real running Compose container
+through a full scan → import → install → verify → host-state →
+reconcile cycle, including real drift detection after manually stopping
+the container from *outside* the backend container on the host's own
+Docker Engine. **`PL8a` (Backup and Update, the first of two tracked
+`PL8` sub-slices per the pre-PL0 review) is DONE** — `backup.py`/
+`update.py` implement the second major lifecycle transition (existing
+application → new Release, configuration/data preserved). Real
+sequencing per §9.19/§9.22/§9.26: `BACKING_UP` (shares the parent
+`UPDATE` operation's own `operation_id`, per architecture's "Shared
+Operation for Sub-Steps") → `EXECUTING_SCRIPT` → `MIGRATING` (real
+script, real captured exit code as migration evidence) → `VERIFYING`
+(reuses `PL7`'s `run_verification` wholesale) → `RECORDING_RESULT`
+(only after a real `PASS` — an unsuccessful update never overwrites the
+last known successful active-deployment record). New schema (migration
+`0008`): `backups`. Configuration preservation is real: a preserved
+secret's actual value is read back from the previous deployment's real
+rendered `.env` (the Registry itself never stores secret plaintext, only
+`secret_reference`) via a new `installation.read_rendered_env` helper.
+A real, necessary amendment to `PL7`'s `verification.py` was required:
+an update's own `POST_UPDATE` verification runs *before* the Registry
+commit, so two of `PL7`'s checks needed a `verification_type` parameter
+to stop treating the still-pointing-at-the-source Registry state as
+drift. Two real bugs found and fixed before shipping (both in this
+slice's own new code, not `PL7`'s): a config-validation helper that
+re-checked preserved string values against strict Python types, and two
+tests that wrongly expected a raised exception from an async (`202`)
+entry point. 14 new tests added (157/157 total passing), all 7 required
+`PL8a` proofs verified live against the real running Compose container
+through a full scan → import → install → update cycle, including
+confirming the real container now running the target image from
+*outside* the backend container. `PL8b` (Recovery) is next. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -303,8 +359,9 @@ Status: NOT STARTED
    Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
    Discovery), `PL3` (Release Import and Registry), `PL4` (Application
    State and Action Intelligence), `PL5` (Deployment Planning and
-   Configuration), and `PL6` (Fresh Installation Execution) done and
-   tested, `PL7` (Verification and Host Reconciliation) next — see
+   Configuration), `PL6` (Fresh Installation Execution), `PL7`
+   (Verification and Host Reconciliation), and `PL8a` (Backup and
+   Update) done and tested, `PL8b` (Recovery) next — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 

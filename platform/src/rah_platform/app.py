@@ -1,10 +1,11 @@
-"""The RAH Offline Installation Platform backend — PL0-PL6.
+"""The RAH Offline Installation Platform backend — PL0-PL8a.
 
 Health (PL0), the Generic Operation Framework (PL1), Release Discovery
 (PL2), Release Import & Registry (PL3), Application State & Action
-Intelligence (PL4), Deployment Planning & Configuration (PL5), and Fresh
-Installation Execution (PL6) so far. Every endpoint returns the common
-API response envelope (§5.2).
+Intelligence (PL4), Deployment Planning & Configuration (PL5), Fresh
+Installation Execution (PL6), Verification & Host Reconciliation (PL7),
+and Backup & Update (PL8a) so far. Every endpoint returns the common API
+response envelope (§5.2).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from pydantic import BaseModel, ConfigDict
 
 from rah_platform import (
     application_query,
+    backup,
     db,
     deployment_planning,
     health,
@@ -26,6 +28,8 @@ from rah_platform import (
     operations,
     release_discovery,
     release_import,
+    update,
+    verification,
 )
 from rah_platform.config import Config
 from rah_platform.envelope import error_envelope, success_envelope
@@ -112,6 +116,63 @@ class InstallApplicationRequest(BaseModel):
 
     configuration: dict[str, ConfigurationInputValue] = {}
     requested_by: str = "operator:unknown"
+
+
+class VerifyDeploymentRequest(BaseModel):
+    """Matches architecture §4.15. `application_id` comes from the URL
+    path. `expected_release_id` may be omitted for `MANUAL` verification
+    — the Platform infers it from the active deployment (§4.15's own
+    explicit allowance, implemented by `verification._resolve_expected_release`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_release_id: str | None = None
+    verification_type: str = "MANUAL"
+    requested_by: str = "operator:unknown"
+
+
+class ReconcileApplicationStateRequest(BaseModel):
+    """Matches architecture §4.17."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_result: bool = True
+    requested_by: str = "operator:unknown"
+
+
+class CreateBackupRequest(BaseModel):
+    """Matches architecture §4.18. `application_id` comes from the URL
+    path. Only `backup_type: DATABASE` is implemented in Period A (see
+    `backup.py`'s own docstring) — `FILES`/`FULL_DEPLOYMENT` are accepted
+    at the schema level but rejected with `BackupUnsupportedError`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    backup_type: str = "DATABASE"
+    verify_after_creation: bool = True
+    requested_by: str = "operator:unknown"
+    reason: str | None = None
+
+
+class UpdateApplicationRequest(BaseModel):
+    """Matches architecture §6.22. `create_backup`/`verify_after_update`
+    are accepted for schema parity with the architecture's documented
+    request shape; `verify_after_update` is not honored as a bypass —
+    verification always runs, same as `PL6`'s install (no flag there
+    either) and matching §9.17's Mandatory Verification Rule's own
+    reasoning applied consistently.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_release_id: str
+    configuration_overrides: dict[str, ConfigurationInputValue] = {}
+    create_backup: bool = True
+    verify_after_update: bool = True
+    requested_by: str = "operator:unknown"
+    reason: str | None = None
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -251,6 +312,88 @@ def create_app(config: Config | None = None) -> FastAPI:
             app.state.config,
             release_id=release_id,
             configuration=configuration,
+            requested_by=request.requested_by,
+        )
+        return success_envelope(result)
+
+    @app.post("/api/v1/applications/{application_id}/verify")
+    async def verify_deployment(application_id: str, request: VerifyDeploymentRequest = VerifyDeploymentRequest()):
+        """§6.28 shows a `202 Accepted` response — this Platform runs
+        verification synchronously instead (see `verification.py`'s own
+        docstring: a handful of fast Docker/Registry checks, not a
+        long-running script, so `PL6`'s async 202-then-poll pattern would
+        add ceremony without buying anything). The operation is still
+        recorded through the Operation Framework either way.
+        """
+        result = verification.verify_deployment(
+            app.state.db_engine,
+            app.state.config,
+            application_id=application_id,
+            expected_release_id=request.expected_release_id,
+            verification_type=request.verification_type,
+            requested_by=request.requested_by,
+        )
+        return success_envelope(result)
+
+    @app.get("/api/v1/applications/{application_id}/host-state")
+    async def get_host_state(
+        application_id: str,
+        include_docker_details: bool = Query(default=True),
+        include_port_details: bool = Query(default=True),
+        include_configuration_checks: bool = Query(default=True),
+    ):
+        """§4.16/§6.29. Read-only. The `include_*` query parameters are
+        accepted for schema parity (matching `SuggestAvailablePortsRequest
+        .exclude_application_id`'s own precedent) — `inspect_host_state`
+        always returns full detail; there is no partial-detail mode yet.
+        """
+        return success_envelope(verification.inspect_host_state(app.state.db_engine, application_id))
+
+    @app.post("/api/v1/applications/{application_id}/reconcile")
+    async def reconcile_application_state(
+        application_id: str, request: ReconcileApplicationStateRequest = ReconcileApplicationStateRequest()
+    ):
+        return success_envelope(
+            verification.reconcile_application_state(
+                app.state.db_engine, application_id, record_result=request.record_result
+            )
+        )
+
+    @app.get("/api/v1/verifications/{verification_run_id}")
+    async def get_verification_result(verification_run_id: str):
+        return success_envelope(verification.get_verification_result(app.state.db_engine, verification_run_id))
+
+    @app.post("/api/v1/applications/{application_id}/backups", status_code=202)
+    async def create_backup(application_id: str, request: CreateBackupRequest = CreateBackupRequest()):
+        result = backup.create_backup(
+            app.state.db_engine,
+            app.state.config,
+            application_id=application_id,
+            backup_type=request.backup_type,
+            verify_after_creation=request.verify_after_creation,
+            requested_by=request.requested_by,
+            reason=request.reason,
+        )
+        return success_envelope(result)
+
+    @app.get("/api/v1/applications/{application_id}/backups")
+    async def list_backups(application_id: str):
+        return success_envelope(backup.list_backups(app.state.db_engine, application_id))
+
+    @app.get("/api/v1/backups/{backup_id}")
+    async def get_backup(backup_id: str):
+        return success_envelope(backup.get_backup(app.state.db_engine, backup_id))
+
+    @app.post("/api/v1/applications/{application_id}/update", status_code=202)
+    async def update_application(application_id: str, request: UpdateApplicationRequest):
+        configuration_overrides = {k: v.model_dump() for k, v in request.configuration_overrides.items()}
+        result = update.update_application(
+            app.state.db_engine,
+            app.state.config,
+            application_id=application_id,
+            target_release_id=request.target_release_id,
+            configuration_overrides=configuration_overrides,
+            create_backup=request.create_backup,
             requested_by=request.requested_by,
         )
         return success_envelope(result)

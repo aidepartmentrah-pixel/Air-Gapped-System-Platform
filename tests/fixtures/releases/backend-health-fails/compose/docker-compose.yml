@@ -1,0 +1,5 @@
+services:
+  backend:
+    image: golden-test-app-backend:1.0.0
+    ports:
+      - "${APP_PORT}:8080"

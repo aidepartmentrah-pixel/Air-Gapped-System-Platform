@@ -19,6 +19,7 @@ _DEFAULT_CONTRACTS_PATH = "/contracts/1.0"
 _DEFAULT_PLATFORM_VERSION = "1.0.0"
 _DEFAULT_DEPLOYMENTS_PATH = "/opt/rah/apps"
 _DEFAULT_INSTALL_SCRIPT_TIMEOUT_SECONDS = 300
+_DEFAULT_BACKUPS_PATH = "/opt/rah/backups"
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class Config:
     platform_version: str = _DEFAULT_PLATFORM_VERSION
     deployments_path: str = _DEFAULT_DEPLOYMENTS_PATH
     install_script_timeout_seconds: int = _DEFAULT_INSTALL_SCRIPT_TIMEOUT_SECONDS
+    backups_path: str = _DEFAULT_BACKUPS_PATH
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -45,4 +47,5 @@ class Config:
             install_script_timeout_seconds=int(
                 os.environ.get("RAH_INSTALL_SCRIPT_TIMEOUT_SECONDS", _DEFAULT_INSTALL_SCRIPT_TIMEOUT_SECONDS)
             ),
+            backups_path=os.environ.get("RAH_BACKUPS_PATH", _DEFAULT_BACKUPS_PATH),
         )

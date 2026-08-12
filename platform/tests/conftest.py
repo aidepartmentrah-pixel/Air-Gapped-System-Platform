@@ -96,6 +96,15 @@ def db_engine(migrated_db_url):
         conn.execute(text("DELETE FROM release_candidates"))
         conn.execute(text("DELETE FROM operation_logs"))
         conn.execute(text("DELETE FROM operation_events"))
+        # verification_runs FKs operations/releases/applications;
+        # verification_checks FKs verification_runs; reconciliations FKs
+        # applications — all must go before those tables are cleared.
+        conn.execute(text("DELETE FROM verification_checks"))
+        conn.execute(text("DELETE FROM verification_runs"))
+        conn.execute(text("DELETE FROM reconciliations"))
+        # backups FKs operations/applications/deployments — same ordering
+        # requirement as verification_runs above.
+        conn.execute(text("DELETE FROM backups"))
         # applications.active_deployment_id <-> deployments.application_id
         # is a real circular FK — break it before deleting either side.
         conn.execute(text("UPDATE applications SET active_deployment_id = NULL"))

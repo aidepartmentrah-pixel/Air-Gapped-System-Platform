@@ -38,9 +38,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-import docker
-
-from rah_platform import deployment_planning, operations
+from rah_platform import deployment_planning, operations, verification
 from rah_platform.application_query import get_application_row, get_release_row, get_storage_state
 from rah_platform.config import Config
 from rah_platform.errors import (
@@ -134,7 +132,7 @@ def install_application(engine, config: Config, *, release_id: str, configuratio
     return operations.get_operation(engine, operation_id)
 
 
-def _prepare_deployment_directory(config: Config, release_directory_name: str, slug: str) -> str:
+def prepare_deployment_directory(config: Config, release_directory_name: str, slug: str) -> str:
     source = os.path.join(config.release_storage_path, release_directory_name)
     canonical_path = os.path.join(config.deployments_path, slug)
     if os.path.isdir(canonical_path):
@@ -147,7 +145,7 @@ def _prepare_deployment_directory(config: Config, release_directory_name: str, s
     return canonical_path
 
 
-def _render_configuration(canonical_path: str, manifest: dict, configuration: dict) -> None:
+def render_configuration(canonical_path: str, manifest: dict, configuration: dict) -> None:
     """Writes `compose/.env` with resolved values — Docker Compose's own
     default env-file lookup, read by the install script's `docker
     compose up`. Secret values *are* written here (the running container
@@ -167,7 +165,35 @@ def _render_configuration(canonical_path: str, manifest: dict, configuration: di
         f.write("\n".join(lines) + "\n")
 
 
-def _run_script(script_path: str, *, timeout_seconds: int) -> tuple[int | None, str, str]:
+def read_rendered_env(canonical_path: str) -> dict[str, str]:
+    """The inverse of `render_configuration` — reads a previous
+    deployment's real `compose/.env` back into a dict. `PL8a`'s update
+    path needs this for real secret preservation: §7.16's Secret-State
+    Rule means the Operational Registry never stores a secret's real
+    plaintext (only `secret_reference`), so the *only* place a preserved
+    secret's real value still exists is the previous deployment's own
+    rendered `.env` file on disk.
+    """
+    env_path = os.path.join(canonical_path, "compose", ".env")
+    values: dict[str, str] = {}
+    with open(env_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if not line or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            values[key] = value
+    return values
+
+
+def run_script(script_path: str, *, timeout_seconds: int, extra_env: dict[str, str] | None = None) -> tuple[int | None, str, str]:
+    """`extra_env` (used by `PL8a`'s backup/update/migrate scripts to
+    receive real filesystem paths — e.g. `RAH_ACTIVE_DEPLOYMENT_PATH` —
+    without inventing a positional-argument convention) is merged over a
+    full copy of the current environment, never replacing it, so scripts
+    still get `PATH` and everything else a real shell needs.
+    """
+    env = {**os.environ, **extra_env} if extra_env else None
     try:
         result = subprocess.run(
             [script_path],
@@ -175,36 +201,14 @@ def _run_script(script_path: str, *, timeout_seconds: int) -> tuple[int | None, 
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
+            env=env,
         )
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired as exc:
         return None, (exc.stdout or ""), (exc.stderr or "")
 
 
-def _minimal_verify(manifest: dict) -> dict:
-    """Real Docker inspection — not the Release's own verify script (that
-    stays `PL7`'s job). Just: are the expected Compose services present
-    and running, per the real Docker Engine.
-    """
-    client = docker.from_env()
-    project = manifest["deployment"]["compose_project_name"]
-    expected_services = {image["service"] for image in manifest["docker"]["images"]}
-    containers = client.containers.list(filters={"label": f"com.docker.compose.project={project}"})
-    running_services = {
-        c.labels.get("com.docker.compose.service")
-        for c in containers
-        if c.status == "running" and c.labels.get("com.docker.compose.service")
-    }
-    missing = sorted(expected_services - running_services)
-    return {
-        "passed": not missing,
-        "expected_services": sorted(expected_services),
-        "running_services": sorted(running_services),
-        "missing_services": missing,
-    }
-
-
-def _commit_deployment(engine, *, application_id: str, release_id: str, manifest: dict, configuration: dict, operation_id: str) -> str:
+def commit_deployment(engine, *, application_id: str, release_id: str, manifest: dict, configuration: dict, operation_id: str) -> str:
     deployment_id = str(uuid.uuid4())
     now = _now()
     try:
@@ -257,8 +261,8 @@ def _execute_install(engine, config: Config, operation_id: str, application_id: 
             ).mappings().first()
 
         operations.update_stage(engine, operation_id, "PREPARING")
-        canonical_path = _prepare_deployment_directory(config, storage_row["directory_name"], slug)
-        _render_configuration(canonical_path, manifest, configuration)
+        canonical_path = prepare_deployment_directory(config, storage_row["directory_name"], slug)
+        render_configuration(canonical_path, manifest, configuration)
         with engine.begin() as conn:
             operations.log(conn, operation_id, "Deployment directory prepared and configuration rendered.")
 
@@ -272,7 +276,7 @@ def _execute_install(engine, config: Config, operation_id: str, application_id: 
                 details={"entrypoint": entrypoint},
             )
 
-        exit_code, stdout, stderr = _run_script(script_path, timeout_seconds=config.install_script_timeout_seconds)
+        exit_code, stdout, stderr = run_script(script_path, timeout_seconds=config.install_script_timeout_seconds)
         with engine.begin() as conn:
             operations.log(
                 conn,
@@ -295,23 +299,37 @@ def _execute_install(engine, config: Config, operation_id: str, application_id: 
             )
 
         operations.update_stage(engine, operation_id, "VERIFYING")
-        verification = _minimal_verify(manifest)
+        configuration_values = {
+            decl["key"]: str((configuration.get(decl["key"]) or {}).get("value", decl.get("default", "")))
+            for decl in manifest["configuration"]["inputs"]
+            if not decl.get("secret", False)
+        }
+        verification_result = verification.run_verification(
+            engine,
+            application_id=application_id,
+            expected_release_id=release_row["release_id"],
+            verification_type="POST_INSTALL",
+            operation_id=operation_id,
+            configuration_values=configuration_values,
+        )
         with engine.begin() as conn:
             operations.append_event(
                 conn,
                 operation_id,
                 "VERIFICATION_COMPLETED",
-                status="PASS" if verification["passed"] else "FAIL",
-                message="Minimal installation verification.",
-                details=verification,
+                status=verification_result["status"],
+                message="Post-installation verification.",
+                details={"verification_run_id": verification_result["verification_run_id"], "summary": verification_result["summary"]},
             )
-        if not verification["passed"]:
+        if verification_result["status"] != "PASS":
             raise MandatoryVerificationFailedError(
-                "Required containers are not running.", stage="VERIFYING", details=verification
+                "One or more mandatory verification checks failed.",
+                stage="VERIFYING",
+                details={"verification_run_id": verification_result["verification_run_id"], "summary": verification_result["summary"]},
             )
 
         operations.update_stage(engine, operation_id, "RECORDING_RESULT")
-        _commit_deployment(
+        commit_deployment(
             engine,
             application_id=application_id,
             release_id=release_row["release_id"],
