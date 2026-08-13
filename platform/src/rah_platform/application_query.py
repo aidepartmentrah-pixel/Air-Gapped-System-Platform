@@ -28,7 +28,7 @@ from rah_platform.errors import (
     ReleaseBelongsToAnotherApplicationError,
     ReleaseNotFoundError,
 )
-from rah_platform.models import applications, deployments, releases, release_storage
+from rah_platform.models import applications, deployments, operations, releases, release_storage
 
 
 def get_application_row(conn, application_id: str):
@@ -280,17 +280,33 @@ def _evaluate_backup(active_deployment_row) -> dict:
     return _allowed("BACKUP")
 
 
-def _evaluate_recover() -> dict:
-    # No failed-operation/recovery tracking exists until PL8 — always
-    # unsupported for now, per the plan's own "some may always return
-    # unsupported" allowance, with correct reasoning rather than a stub.
-    return _blocked("RECOVER", [{"code": "PLT-RECOVERY-001", "message": "There is no failed operation to recover from."}])
+def _get_last_lifecycle_operation_row(conn, application_id: str):
+    """The most recent `INSTALL`/`UPDATE` operation for this application,
+    if any — `PL8b`'s real trigger for `RECOVER` availability (§7.24:
+    "Recovery only activates on a controlled failure path"). `VERIFY`/
+    `BACKUP`/`RECOVER` operations are deliberately excluded: recovering
+    from a failed *verification-only* or *backup-only* attempt isn't a
+    "restore previous state" scenario the way a failed install/update is.
+    """
+    return conn.execute(
+        operations.select()
+        .where(operations.c.application_id == application_id, operations.c.operation_type.in_(("INSTALL", "UPDATE")))
+        .order_by(operations.c.created_at.desc())
+        .limit(1)
+    ).mappings().first()
+
+
+def _evaluate_recover(last_lifecycle_operation_row) -> dict:
+    if last_lifecycle_operation_row is None or last_lifecycle_operation_row["status"] != "FAILED":
+        return _blocked("RECOVER", [{"code": "PLT-RECOVERY-001", "message": "There is no failed operation to recover from."}])
+    return _allowed("RECOVER", requirements=["MANDATORY_VERIFICATION"])
 
 
 def get_available_actions(engine, application_id: str, target_release_id: str | None = None) -> dict:
     with engine.connect() as conn:
         application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
+        last_lifecycle_operation_row = _get_last_lifecycle_operation_row(conn, application_id)
 
         active_release_row = None
         if active_deployment_row:
@@ -316,7 +332,7 @@ def get_available_actions(engine, application_id: str, target_release_id: str | 
             _evaluate_reinstall(active_deployment_row, target_release_row),
             _evaluate_verify(active_deployment_row),
             _evaluate_backup(active_deployment_row),
-            _evaluate_recover(),
+            _evaluate_recover(last_lifecycle_operation_row),
         ]
 
     return {

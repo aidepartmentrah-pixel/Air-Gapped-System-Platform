@@ -558,3 +558,69 @@ class BackupNotFoundError(PlatformError):
     category = "BACKUP"
     retryable = False
     http_status = 404
+
+
+# --- PL8b: Recovery ---
+
+
+class BackupBelongsToAnotherApplicationError(PlatformError):
+    """§4.20's `RestoreBackupRequest`: "The Platform shall verify that the
+    backup belongs to the selected application." §7.23 Backup Ownership
+    Rule: "A backup from one application shall not be restored into
+    another application through ordinary Platform operation."
+    """
+
+    code = "PLT-BACKUP-007"
+    category = "BACKUP"
+    retryable = False
+    http_status = 422
+
+
+class RecoveryUnsupportedError(PlatformError):
+    """§4.15's own note: `_evaluate_recover()` (`PL4`) already used this
+    exact code as a *blocking-reason string* for "no failed operation to
+    recover from" — this is that same code, finally wired as a real
+    raised class now that `PL8b` gives it something to actually enforce.
+    """
+
+    code = "PLT-RECOVERY-001"
+    category = "RECOVERY"
+    retryable = False
+    http_status = 422
+
+
+class RecoveryPrerequisitesFailedError(PlatformError):
+    code = "PLT-RECOVERY-002"
+    category = "RECOVERY"
+    retryable = False
+    http_status = 422
+
+
+class RestoreScriptFailedError(PlatformError):
+    code = "PLT-RECOVERY-003"
+    category = "RECOVERY"
+    retryable = True
+    http_status = 422
+
+
+class RecoveryVerificationFailedError(PlatformError):
+    code = "PLT-RECOVERY-004"
+    category = "RECOVERY"
+    retryable = True
+    http_status = 422
+
+
+class PreviousOperationalStateUnavailableError(PlatformError):
+    """§8.21 `PLT-RECOVERY-005`. The backup's own originating deployment
+    record no longer exists to resolve which Release's restore script
+    and manifest to use — a real, if rare, data-integrity gap, not a
+    speculative case (e.g. if a `deployments` row were ever purged
+    independently of its associated `backups` row, which `PL8a`'s own
+    `backups.deployment_id` FK deliberately allows via `ON DELETE
+    SET NULL`-equivalent nullability).
+    """
+
+    code = "PLT-RECOVERY-005"
+    category = "RECOVERY"
+    retryable = False
+    http_status = 500

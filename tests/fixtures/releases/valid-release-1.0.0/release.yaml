@@ -27,6 +27,7 @@ deployment:
   entrypoints:
     install: install_offline.sh
     verify: verify_deployment.sh
+    restore: restore_database.sh
   supported_operations:
     fresh_install: true
     update: false

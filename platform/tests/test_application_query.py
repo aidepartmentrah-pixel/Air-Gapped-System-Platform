@@ -235,7 +235,12 @@ def test_verify_and_backup_require_installed_application(db_engine):
     assert _action(installed["actions"], "BACKUP")["allowed"] is True
 
 
-def test_recover_always_unsupported_with_correct_reasoning(db_engine):
+def test_recover_unsupported_when_no_failed_operation(db_engine):
+    """`PL8b` gives `RECOVER` real logic (a failed `INSTALL`/`UPDATE`
+    makes it available) — this test now covers only the "nothing to
+    recover from" case; see `test_recovery.py` for the real-failure
+    case.
+    """
     app_id = seed_application(db_engine)
     result = application_query.get_available_actions(db_engine, app_id)
     recover = _action(result["actions"], "RECOVER")

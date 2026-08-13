@@ -1,11 +1,11 @@
-"""The RAH Offline Installation Platform backend — PL0-PL8a.
+"""The RAH Offline Installation Platform backend — PL0-PL8b.
 
 Health (PL0), the Generic Operation Framework (PL1), Release Discovery
 (PL2), Release Import & Registry (PL3), Application State & Action
 Intelligence (PL4), Deployment Planning & Configuration (PL5), Fresh
 Installation Execution (PL6), Verification & Host Reconciliation (PL7),
-and Backup & Update (PL8a) so far. Every endpoint returns the common API
-response envelope (§5.2).
+Backup & Update (PL8a), and Recovery (PL8b) so far. Every endpoint
+returns the common API response envelope (§5.2).
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from rah_platform import (
     health,
     installation,
     operations,
+    recovery,
     release_discovery,
     release_import,
     update,
@@ -171,6 +172,39 @@ class UpdateApplicationRequest(BaseModel):
     configuration_overrides: dict[str, ConfigurationInputValue] = {}
     create_backup: bool = True
     verify_after_update: bool = True
+    requested_by: str = "operator:unknown"
+    reason: str | None = None
+
+
+class RestoreBackupRequest(BaseModel):
+    """Matches architecture §4.20. `backup_id` comes from the URL path;
+    `application_id` is still required in the body — the Platform verifies
+    the backup belongs to *that* application (§7.23 Backup Ownership
+    Rule) rather than silently inferring the application from the
+    backup's own record. `verify_after_restore` is accepted for schema
+    parity; verification always runs, same reasoning as
+    `UpdateApplicationRequest.verify_after_update`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str
+    verify_after_restore: bool = True
+    requested_by: str = "operator:unknown"
+    reason: str | None = None
+
+
+class RecoverApplicationRequest(BaseModel):
+    """Matches architecture §4.21. `application_id` comes from the URL
+    path. `recovery_mode` — only `RESTORE_PREVIOUS_STATE` is implemented
+    in Period A (see `recovery.py`'s own docstring).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    failed_operation_id: str
+    backup_id: str
+    recovery_mode: str = "RESTORE_PREVIOUS_STATE"
     requested_by: str = "operator:unknown"
     reason: str | None = None
 
@@ -395,6 +429,32 @@ def create_app(config: Config | None = None) -> FastAPI:
             configuration_overrides=configuration_overrides,
             create_backup=request.create_backup,
             requested_by=request.requested_by,
+        )
+        return success_envelope(result)
+
+    @app.post("/api/v1/backups/{backup_id}/restore", status_code=202)
+    async def restore_backup(backup_id: str, request: RestoreBackupRequest):
+        result = recovery.restore_backup(
+            app.state.db_engine,
+            app.state.config,
+            application_id=request.application_id,
+            backup_id=backup_id,
+            requested_by=request.requested_by,
+            reason=request.reason,
+        )
+        return success_envelope(result)
+
+    @app.post("/api/v1/applications/{application_id}/recover", status_code=202)
+    async def recover_application(application_id: str, request: RecoverApplicationRequest):
+        result = recovery.recover_application(
+            app.state.db_engine,
+            app.state.config,
+            application_id=application_id,
+            failed_operation_id=request.failed_operation_id,
+            backup_id=request.backup_id,
+            recovery_mode=request.recovery_mode,
+            requested_by=request.requested_by,
+            reason=request.reason,
         )
         return success_envelope(result)
 

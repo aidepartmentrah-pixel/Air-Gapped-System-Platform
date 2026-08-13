@@ -317,7 +317,34 @@ entry point. 14 new tests added (157/157 total passing), all 7 required
 `PL8a` proofs verified live against the real running Compose container
 through a full scan → import → install → update cycle, including
 confirming the real container now running the target image from
-*outside* the backend container. `PL8b` (Recovery) is next. See
+*outside* the backend container.
+**`PL8b` (Recovery, the second `PL8` sub-slice) is DONE** — `recovery.py`
+implements §7.24 (Recovery History Rule): recovery always creates its
+own, separate operation record, never rewriting the failed operation it
+recovers from. A deliberately simple, real design: recovery never
+changes *which* Release is active, only repairs the *host* back to what
+the Registry already, correctly, still claims — §9.22 already
+guarantees a failed `INSTALL`/`UPDATE` never falsely overwrote the
+active-deployment record, so `_perform_restore` always targets the
+*currently active* deployment and never calls `commit_deployment`.
+`PL4`'s `_evaluate_recover()` — previously a correctly-reasoned
+permanent stub ("no failure-tracking exists until PL8") — now has real
+logic: `RECOVER` is allowed exactly when the application's most recent
+`INSTALL`/`UPDATE` operation is `FAILED`. A real bug caught by the test
+itself, not by inspection: the first draft of `valid-release-1.0.0`'s
+new restore script only restored configuration, not the actual
+container — insufficient for the real "verification failed after the
+update script already swapped the container" scenario, caught because
+`reconcile_application_state` still reported `DRIFT_DETECTED` after a
+"successful" recovery; fixed with a real, complete restore (`docker
+load` + `docker compose up` against the *active* deployment's real
+`.env`). 6 new tests added (163/163 total passing), all required proofs
+verified live against the real running Compose container — including a
+real failed update genuinely flipping `RECOVER` from `false` to `true`,
+and a real recovery repairing real host drift back to `CONSISTENT`
+while the original failure remains visibly `FAILED` in history. `PL9`
+(Operator UI and Independent Offline Proof, split into `PL9a`/`PL9b`
+per the pre-PL0 review) is next. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -360,8 +387,10 @@ Status: NOT STARTED
    Discovery), `PL3` (Release Import and Registry), `PL4` (Application
    State and Action Intelligence), `PL5` (Deployment Planning and
    Configuration), `PL6` (Fresh Installation Execution), `PL7`
-   (Verification and Host Reconciliation), and `PL8a` (Backup and
-   Update) done and tested, `PL8b` (Recovery) next — see
+   (Verification and Host Reconciliation), `PL8a` (Backup and Update),
+   and `PL8b` (Recovery) done and tested — all of `PL8` (Backup, Update
+   and Recovery) is now complete, `PL9` (Operator UI and Independent
+   Offline Proof) next — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 
