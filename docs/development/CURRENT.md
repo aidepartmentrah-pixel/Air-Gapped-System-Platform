@@ -7,9 +7,19 @@ Packager `P0`–`P7` are automated-portion-done — `P7` (Validation,
 Finalization and Independent Offline Proof) finished `rah package`/
 `rah validate` (56 RC-* rules, checksums, Compliance Report, atomic
 finalization), built, tested, and live-proven against the real built
-container and real HCopilot. **Remaining**: the Real Manual Acceptance
-Test itself (copy a finalized Release to a real Offline Debian VM,
-install, verify) — not yet scoped with the user.
+container and real HCopilot. **The Real Manual Acceptance Test has now
+been executed** (2026-08-11, real Indicator app, real lab hardware) and
+**FAILED at Phase 1**: `rah package` correctly rejected the candidate at
+`RC-SCR-005` — Indicator's own lifecycle scripts are committed to Git
+without the executable bit, a real gap in the Indicator repo, not the
+Packager. Phases 2–6 (offline transfer/install/verify/restart) were never
+reached. Full results:
+`docs/development/Period A — Independent Product Development;
+Packager/3. Real Manual Acceptance Test — Results.md`. **Remaining**: fix
+and re-commit the Indicator repo's script permissions, then re-run
+`rah package` — the `or-stt`/Legion/offline-VM environment is already
+primed for an immediate re-run (nothing else in the pipeline needs
+redoing).
 
 ## Architecture
 
@@ -153,11 +163,21 @@ earlier P4/P6 CRLF finding) — all fixed at their root cause. Final,
 clean HCopilot run: every rule passes except the already-documented
 `RC-OFF-002` (prebuilt base images like `sqlserver` aren't bundled
 offline, a known P5/P6 scope gap) — correctly and honestly rejected, not
-papered over. **Not yet done**: the Real Manual Acceptance Test itself
-(copy to a real Offline Debian VM, run `install_offline.sh`, verify
-manually) — needs explicit scoping with the user first. See
+papered over. **Real Manual Acceptance Test executed 2026-08-11, FAILED at
+Phase 1**: real Indicator app, real Legion/`or-stt`/offline-VM lab
+hardware — `rah package` built two real Docker images and a full
+candidate Release, then correctly refused to finalize it at `RC-SCR-005`
+(Indicator's lifecycle scripts committed without the executable bit — a
+real Indicator-repo gap, not a Packager bug). Phases 2–6 not reached; the
+offline VM was never touched. See
 `docs/development/Period A — Independent Product Development;
-Packager/2. Initial Slicing Task Table.md`.
+Packager/3. Real Manual Acceptance Test — Results.md` for the full
+Testing Record and a Packager design note (`rah construct`'s
+`shutil.copy2` at `construct_release.py:127` copies scripts with no
+`chmod` enforcement, so a full Docker build runs before `RC-SCR-005`
+catches this at the very end — cheap to catch earlier). Environment is
+primed for an immediate re-run once Indicator's script permissions are
+fixed and re-committed.
 
 ## Period A — Platform
 
@@ -410,10 +430,11 @@ Status: NOT STARTED
    Artifact Preparation, `rah build`), `P6` (Release Construction,
    `rah construct`), and `P7`'s automated portion (Validation and
    Finalization, `rah package`/`rah validate`) all done and tested. The
-   Real Manual Acceptance Test (offline VM install) remains, needs
-   scoping with the user. See
+   Real Manual Acceptance Test executed 2026-08-11 against real Indicator
+   and real lab hardware, FAILED at Phase 1 on an Indicator-repo defect
+   (non-executable lifecycle scripts), Phases 2–6 not reached. See
    `docs/development/Period A — Independent Product Development;
-   Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
+   Packager/3. Real Manual Acceptance Test — Results.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
    Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
    Discovery), `PL3` (Release Import and Registry), `PL4` (Application
@@ -485,22 +506,29 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-None on further coding. `P7`'s automated portion (`rah package`/
-`rah validate`) is done. The remaining piece — the Real Manual Acceptance
-Test against a real Offline Debian VM — is blocked on scoping with the
-user: which VM/environment to use, which acceptance app, and whether to
-accept the known `RC-OFF-002` gap (prebuilt base images not bundled
-offline) for this proof or treat it as something to close first.
+On the Packager Exit Gate: not scoping anymore (that happened and the
+test ran) — blocked on a fix in the **Indicator application repo**
+(`C:\Users\it\Documents\GitHub\Healthcare_reporting_system_backup` on the
+Legion), not this repo: `chmod +x` its five `release/scripts/*.sh`
+lifecycle entrypoints and re-commit, then re-run `rah package` on
+`or-stt`. Everything else needed for the re-run (Legion/offline-VM
+reachability, the cloned Indicator checkout, valid engineering answers)
+is already in place — see
+`docs/development/Period A — Independent Product Development;
+Packager/3. Real Manual Acceptance Test — Results.md`.
 
 ## Next Major Gate
 
-The Real Manual Acceptance Test: copy a real finalized Release to a real
-Offline Debian VM, run its own `install_offline.sh`, manually verify the
-application starts — the last piece of the Period A Packager Exit Gate
-("a real application can be initialized, inspected, assisted through
-Claude, planned, built, packaged, validated, finalized, manually
-installed offline, and a second Release can be produced without
-corrupting version history").
+The Real Manual Acceptance Test, Phases 2–6: transfer a real finalized
+Indicator Release to `Offline-AirGapped-Simulator`, `rah validate` it
+independently, run its own `install_offline.sh`, manually verify the
+application starts, restart-check — the last piece of the Period A
+Packager Exit Gate ("a real application can be initialized, inspected,
+assisted through Claude, planned, built, packaged, validated, finalized,
+manually installed offline, and a second Release can be produced without
+corrupting version history"). Phase 1 (Packaging) was attempted
+2026-08-11 and failed on a source-repo defect, not a Packager defect —
+see above.
 
 ## Future Design Tasks (not yet started)
 
