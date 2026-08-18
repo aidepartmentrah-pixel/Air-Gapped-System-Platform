@@ -342,9 +342,41 @@ load` + `docker compose up` against the *active* deployment's real
 verified live against the real running Compose container — including a
 real failed update genuinely flipping `RECOVER` from `false` to `true`,
 and a real recovery repairing real host drift back to `CONSISTENT`
-while the original failure remains visibly `FAILED` in history. `PL9`
-(Operator UI and Independent Offline Proof, split into `PL9a`/`PL9b`
-per the pre-PL0 review) is next. See
+while the original failure remains visibly `FAILED` in history.
+**`PL9a` (Operator UI Integration, the first of two tracked `PL9`
+sub-slices) is DONE** — a real React 19 + TypeScript + Vite +
+TailwindCSS v4 + shadcn/ui (Radix) + TanStack Router/Query + React Hook
+Form + Zod UI at `platform/frontend/`, matching the UX architecture
+spec's exact dark palette, layout, and screens. Every screen is wired to
+the real API, no mocked data: Dashboard, Platform (scan/import),
+Applications, Application Details (`Overview`/`Releases`/`History`/
+`Settings`), a real 4-step Installation Wizard, an Update flow, a
+reusable `ProgressView` (live log, auto-scroll), and an
+`ErrorPresentation` component covering the full `PLT-*` catalog with
+Title/Possible Cause/Suggested Action/collapsed Technical Details —
+never a raw exception. One real backend gap found and closed (not
+approximated client-side): added `GET /api/v1/operations` (cross-app
+listing) with 2 new tests (165/165 backend tests passing). Every
+required user journey was live-driven with a real headless browser
+(Playwright) against the real backend — Dashboard, Release Import
+(success and a real `PLT-INTEGRITY-002` error path), Fresh Install (real
+`docker load`+`compose up`, real container confirmed via `docker ps`
+from outside the backend container), History — catching one real bug
+(a cache-invalidation gap that hid a genuinely-succeeded `Verify`
+operation from the "Recent Operations" panel) before it shipped. Also
+found and fixed, mid-slice, a real host-level infrastructure fault
+unrelated to this session's own work: Docker's default bridge went down
+due to the Windscribe VPN client's kill-switch nftables rules
+conflicting with Docker's NAT rules, diagnosed from scratch (with the
+user running sudo diagnostics) down to the exact conflicting chains and
+fixed by disconnecting the VPN — this had been silently blocking the
+entire backend test suite, not just PL9a's own work. The frontend is
+also genuinely deployable, not just a dev server: a multi-stage
+Dockerfile (`npm run build` → nginx) wired into `docker-compose.yml` as
+a new `frontend` service, live-verified serving the real production
+build and correctly proxying real API calls through the Compose
+network. `PL9b` (Offline VM Acceptance) is next — needs the actual
+Offline Debian VM, scoping with the user pending. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -388,9 +420,10 @@ Status: NOT STARTED
    State and Action Intelligence), `PL5` (Deployment Planning and
    Configuration), `PL6` (Fresh Installation Execution), `PL7`
    (Verification and Host Reconciliation), `PL8a` (Backup and Update),
-   and `PL8b` (Recovery) done and tested — all of `PL8` (Backup, Update
-   and Recovery) is now complete, `PL9` (Operator UI and Independent
-   Offline Proof) next — see
+   `PL8b` (Recovery), and `PL9a` (Operator UI Integration) done and
+   tested — all of `PL8` is complete and the UI now performs the same
+   operations as the API, `PL9b` (Offline VM Acceptance) next, needs the
+   actual Offline Debian VM, scoping with the user pending — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 

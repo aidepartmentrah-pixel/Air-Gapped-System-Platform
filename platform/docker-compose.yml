@@ -30,5 +30,12 @@ services:
     ports:
       - "8000:8000"
 
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
 volumes:
   rah_platform_pg_data:

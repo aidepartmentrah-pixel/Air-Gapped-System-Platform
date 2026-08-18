@@ -246,6 +246,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         status_code = 200 if result["status"] == "READY" else 503
         return JSONResponse(status_code=status_code, content=success_envelope(result))
 
+    @app.get("/api/v1/operations")
+    async def list_operations(status: str | None = Query(default=None), limit: int = Query(default=50)):
+        return success_envelope(operations.list_operations(app.state.db_engine, status=status, limit=limit))
+
     @app.get("/api/v1/operations/{operation_id}")
     async def get_operation(operation_id: str):
         return success_envelope(operations.get_operation(app.state.db_engine, operation_id))
