@@ -16,7 +16,7 @@ import docker
 import pytest
 
 from rah_packager.docker_build import build_release_images
-from rah_packager.errors import DockerBuildFailedError, MalformedComposeError
+from rah_packager.errors import DockerBuildFailedError, DockerPullFailedError, MalformedComposeError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "projects"
 SLUG = "pytest-p5"
@@ -45,6 +45,7 @@ def test_trivial_one_container_builds_and_exports(tmp_path):
             {
                 "service": "app",
                 "built": True,
+                "exported": True,
                 "image": f"rah-{SLUG}-app:0.0.1",
                 "repository": f"rah-{SLUG}-app",
                 "tag": "0.0.1",
@@ -90,6 +91,7 @@ def test_simple_frontend_backend_builds_expected_images(tmp_path):
         for name in ("backend", "frontend"):
             entry = by_service[name]
             assert entry["built"] is True
+            assert entry["exported"] is True
             assert entry["repository"] == f"rah-{SLUG}-{name}"
             assert entry["image"] == f"rah-{SLUG}-{name}:0.0.1"
             archive_path = output_dir / entry["archive"]
@@ -97,16 +99,26 @@ def test_simple_frontend_backend_builds_expected_images(tmp_path):
             assert archive_path.stat().st_size > 0
 
         # A service with only a prebuilt `image:` reference (no `build:`
-        # key) is reported, not built or exported — out of P5's scope.
-        assert by_service["database"] == {
-            "service": "database",
-            "built": False,
-            "image": "postgres:16",
-            "repository": None,
-            "tag": None,
-            "archive": None,
-            "build_log": None,
-        }
+        # key) is pulled and exported too, closing RC-OFF-002 — never
+        # retagged, the original reference is kept as-is.
+        db_entry = by_service["database"]
+        assert db_entry["built"] is False
+        assert db_entry["exported"] is True
+        assert db_entry["image"] == "alpine:3.19"
+        assert db_entry["repository"] == "alpine"
+        assert db_entry["tag"] == "3.19"
+        assert db_entry["size_bytes"] > 0
+        archive_path = output_dir / db_entry["archive"]
+        assert archive_path.is_file()
+        assert archive_path.stat().st_size > 0
+
+        # Exported pulled-image archive is a genuinely valid, loadable
+        # image — same proof already applied to built images elsewhere.
+        client.images.remove("alpine:3.19", force=True)
+        with open(archive_path, "rb") as archive_file:
+            loaded = client.images.load(archive_file.read())
+        assert len(loaded) == 1
+        assert loaded[0].id == db_entry["image_id"]
     finally:
         _remove_image(client, f"rah-{SLUG}-backend", "0.0.1")
         _remove_image(client, f"rah-{SLUG}-frontend", "0.0.1")
@@ -122,6 +134,67 @@ def test_broken_dockerfile_raises_structured_error(tmp_path):
     assert exc_info.value.code == "PKG-DOCKER-BUILD-FAILED"
     assert exc_info.value.service == "app"
     assert not (tmp_path / "workspace" / "docker-images").exists()
+
+
+# --- A prebuilt image reference that doesn't exist anywhere pullable ---
+
+
+def test_unpullable_prebuilt_image_raises_structured_error(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "docker-compose.yml").write_text(
+        "services:\n"
+        "  database:\n"
+        "    image: this-image-definitely-does-not-exist-anywhere:0.0.0\n"
+    )
+
+    with pytest.raises(DockerPullFailedError) as exc_info:
+        build_release_images(project, SLUG, "0.0.1", tmp_path / "workspace")
+
+    assert exc_info.value.code == "PKG-DOCKER-PULL-FAILED"
+    assert exc_info.value.service == "database"
+    assert exc_info.value.image_ref == "this-image-definitely-does-not-exist-anywhere:0.0.0"
+
+
+# --- A no-build: service sharing another service's build output ---
+
+
+def test_service_sharing_a_sibling_build_is_not_pulled(tmp_path):
+    """Real pattern found in HCopilot: a one-shot `db-init` service with no
+    `build:` of its own, declaring the exact image tag the `backend`
+    service's own `build:` also tags. Must be recognized as "shares that
+    build", not treated as an external image to pull (which would fail —
+    that tag is never published anywhere, it only exists locally once
+    `backend` builds it).
+    """
+    project = tmp_path / "project"
+    (project / "backend").mkdir(parents=True)
+    (project / "backend" / "Dockerfile").write_text("FROM scratch\nLABEL test=true\n")
+    (project / "docker-compose.yml").write_text(
+        "services:\n"
+        "  backend:\n"
+        "    build:\n      context: ./backend\n"
+        "    image: shared-app:1.0.0\n"
+        "  db-init:\n"
+        "    image: shared-app:1.0.0\n"
+    )
+
+    client = docker.from_env()
+    output_dir = tmp_path / "workspace"
+    try:
+        result = build_release_images(project, SLUG, "0.0.1", output_dir)
+
+        by_service = {entry["service"]: entry for entry in result["images"]}
+        assert by_service["backend"]["built"] is True
+        assert by_service["backend"]["exported"] is True
+
+        db_init_entry = by_service["db-init"]
+        assert db_init_entry["built"] is False
+        assert db_init_entry["exported"] is False
+        assert db_init_entry["shares_build_of"] == "backend"
+        assert db_init_entry["archive"] is None
+    finally:
+        _remove_image(client, f"rah-{SLUG}-backend", "0.0.1")
 
 
 # --- Malformed Compose rejected before any Docker interaction ---

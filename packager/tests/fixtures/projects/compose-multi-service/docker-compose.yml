@@ -6,4 +6,4 @@ services:
   frontend:
     build: ./frontend
   database:
-    image: postgres:16
+    image: alpine:3.19

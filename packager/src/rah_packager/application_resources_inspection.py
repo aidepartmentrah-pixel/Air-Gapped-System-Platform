@@ -27,7 +27,17 @@ import os
 import re
 from pathlib import Path
 
-_IGNORED_DIR_NAMES = {".git", ".rah", "node_modules", ".venv", "venv", "__pycache__"}
+_IGNORED_DIR_NAMES = {
+    ".git", ".rah", "node_modules", ".venv", "venv", "__pycache__",
+    # Real, recurring gotcha: the Packager's own --output directory,
+    # conventionally nested inside the project (see
+    # docs/decisions/packager-responsibility-boundaries.md), accumulates
+    # real generated content between package attempts. Left unignored,
+    # every rah package run changes the inspection fingerprint it just
+    # produced output from, making the *next* run see stale answers
+    # immediately — a self-inflicted staleness loop, not a real change.
+    "release_packager",
+}
 
 _SCRIPT_EXTENSIONS = {".sh", ".bat", ".ps1", ".py"}
 _SCRIPT_DIR_NAMES = {"scripts", "script"}

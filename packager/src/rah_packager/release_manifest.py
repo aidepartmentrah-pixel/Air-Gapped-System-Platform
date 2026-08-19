@@ -42,7 +42,6 @@ import jsonschema
 from rah_packager.errors import (
     ReleaseManifestIncompleteError,
     ReleaseManifestSchemaError,
-    ReleaseModelArtifactsNotSupportedError,
 )
 
 MANIFEST_SCHEMA_VERSION = "1.0"
@@ -432,9 +431,6 @@ def check_answers_sufficient_for_manifest(answers: dict) -> None:
             "configuration.template is missing — nothing to render them into."
         )
 
-    if answers["models"].get("artifacts"):
-        raise ReleaseModelArtifactsNotSupportedError()
-
 
 def build_release_manifest(
     *,
@@ -445,6 +441,7 @@ def build_release_manifest(
     git_facts: dict,
     answers: dict,
     docker_images: list[dict],
+    model_artifacts: list[dict],
 ) -> dict:
     """Pure function: no filesystem access, no side effects. Every value
     either comes from an already-validated source (Project Version State,
@@ -500,7 +497,7 @@ def build_release_manifest(
         "database": dict(answers["database"]),
         "persistent_state": dict(answers["persistent_state"]),
         "offline_requirements": dict(answers["offline_requirements"]),
-        "models": {"required": answers["models"]["required"], "artifacts": []},
+        "models": {"required": answers["models"]["required"], "artifacts": model_artifacts},
         "client": dict(answers["client"]),
         "verification": dict(answers["verification"]),
         "documentation": dict(answers["documentation"]),

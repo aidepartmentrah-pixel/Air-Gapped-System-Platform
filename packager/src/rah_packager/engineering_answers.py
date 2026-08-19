@@ -17,7 +17,8 @@ that missing design, made concrete:
   excluded here because P2 (or later generated-at-packaging-time logic)
   already supplies them deterministically. `models.artifacts[]` drops
   `baked_into_image`/`checksum` for the same reason — both are computed at
-  packaging time (P6), not answerable during engineering.
+  packaging time (P6) from the two fields it adds instead (`source_path`,
+  `service`), not answerable during engineering.
 - Same structural/cross-field split the manifest schema itself already
   uses: this schema validates shape and types only. Cross-field and
   conditional rules (e.g. "if database.required is true, platform must be
@@ -297,16 +298,35 @@ ENGINEERING_ANSWERS_SCHEMA: dict = {
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["id", "version"],
+                        "required": ["id", "version", "source_path", "service"],
                         "properties": {
                             "id": {"type": "string"},
                             "version": {"type": "string"},
                             "source_registry": {"type": "string"},
+                            "source_path": {
+                                "type": "string",
+                                "description": (
+                                    "Relative path (from repo root) to the model file or "
+                                    "directory in the source repo — where the Packaging "
+                                    "Engine reads it from to compute checksum at packaging "
+                                    "time. Not part of the final manifest."
+                                ),
+                            },
+                            "service": {
+                                "type": "string",
+                                "description": (
+                                    "Compose service this model is baked into. Cross-checked "
+                                    "against docker.images[] at packaging time to produce "
+                                    "the manifest's baked_into_image. Not part of the final "
+                                    "manifest itself."
+                                ),
+                            },
                         },
                     },
                     "description": (
                         "baked_into_image and checksum are dropped here — both are "
-                        "computed at packaging time (P6), not answerable during engineering."
+                        "computed at packaging time (P6) from source_path/service, not "
+                        "answerable during engineering."
                     ),
                 },
             },

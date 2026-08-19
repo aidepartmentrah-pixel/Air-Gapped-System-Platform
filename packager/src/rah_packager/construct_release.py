@@ -21,12 +21,13 @@ the expensive real Docker build — a bad engineering-answers input should
 never cost the minutes a real multi-service build takes.
 
 Known, deliberate scope gaps (not silently papered over):
-- `docker.images[]` only includes services P5 actually built. A service
-  with only a prebuilt `image:` reference (no `build:` key) has no
-  exported archive in this Packager version and is not represented in
-  the manifest at all — see `docker_build.py`'s own scope note.
-- Model artifacts: `PKG-MANIFEST-MODELS-NOT-SUPPORTED` if any are
-  declared — see `release_manifest.py`.
+- `docker.images[]` includes every service P5 exported — built via
+  `build:`, or pulled+exported when only a prebuilt `image:` is declared
+  (closing RC-OFF-002 for both cases) — see `docker_build.py`'s own
+  scope note.
+- Model artifacts: each declared artifact's `source_path` must exist and
+  its `service` must match a service this Release actually exported an
+  image for — see `model_artifacts.py`.
 - Script/documentation/verification file destinations flatten to
   basename (`scripts/{basename}`, not the original source-relative
   path) — matches the layout Contract's own "relative paths under
@@ -48,6 +49,7 @@ import yaml
 from rah_packager.docker_build import build_release_images
 from rah_packager.errors import ReleaseConstructionWriteError
 from rah_packager.inspection import inspect_project
+from rah_packager.model_artifacts import resolve_baked_into_image, verify_and_checksum_model_artifacts
 from rah_packager.release_manifest import (
     build_release_manifest,
     check_answers_sufficient_for_manifest,
@@ -141,13 +143,24 @@ def _write_compose_file(project_path: Path, release_dir: Path, docker_facts: dic
     )
     services = compose_data.get("services") or {}
     built_by_service = {img["service"]: img for img in build_result["images"] if img["built"]}
+    shares_by_service = {
+        img["service"]: img["shares_build_of"]
+        for img in build_result["images"]
+        if img.get("shares_build_of")
+    }
 
     for name, definition in services.items():
         built = built_by_service.get(name)
-        if built is None:
+        if built is not None:
+            definition.pop("build", None)
+            definition["image"] = built["image"]
             continue
-        definition.pop("build", None)
-        definition["image"] = built["image"]
+        sibling_service = shares_by_service.get(name)
+        if sibling_service is not None:
+            # No `build:` key to pop here — this service never had one; it
+            # only ever referenced the sibling's image tag, which now needs
+            # to point at the sibling's real, retagged image instead.
+            definition["image"] = built_by_service[sibling_service]["image"]
 
     dest_path = release_dir / "compose" / "docker-compose.yml"
     try:
@@ -190,6 +203,7 @@ def construct_release(
 
     # Fail fast, before any expensive Docker build.
     check_answers_sufficient_for_manifest(answers)
+    checksummed_model_artifacts = verify_and_checksum_model_artifacts(path, answers)
 
     inspection_result = inspect_project(path)
     application = plan["application"]
@@ -223,8 +237,9 @@ def construct_release(
             "required": True,
         }
         for image in build_result["images"]
-        if image["built"]
+        if image.get("exported")
     ]
+    model_artifacts = resolve_baked_into_image(checksummed_model_artifacts, docker_images)
 
     release_answers = _copy_resources_and_rewrite_answers(path, release_dir, answers)
     _write_compose_file(path, release_dir, inspection_result["docker"], build_result)
@@ -237,6 +252,7 @@ def construct_release(
         git_facts=inspection_result["git"],
         answers=release_answers,
         docker_images=docker_images,
+        model_artifacts=model_artifacts,
     )
     manifest_path = _write_manifest_atomically(release_dir, manifest)
 

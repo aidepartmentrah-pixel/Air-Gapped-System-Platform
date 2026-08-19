@@ -6,7 +6,6 @@ import pytest
 from rah_packager.errors import (
     ReleaseManifestIncompleteError,
     ReleaseManifestSchemaError,
-    ReleaseModelArtifactsNotSupportedError,
 )
 from rah_packager.release_manifest import (
     RELEASE_MANIFEST_SCHEMA,
@@ -138,18 +137,6 @@ def test_configuration_inputs_with_template_is_sufficient():
     check_answers_sufficient_for_manifest(answers)  # must not raise
 
 
-def test_declared_model_artifacts_not_supported():
-    answers = _valid_answers()
-    answers["models"] = {
-        "required": True,
-        "artifacts": [{"id": "m1", "version": "1.0", "source_registry": "hf://x"}],
-    }
-
-    with pytest.raises(ReleaseModelArtifactsNotSupportedError) as exc_info:
-        check_answers_sufficient_for_manifest(answers)
-    assert exc_info.value.code == "PKG-MANIFEST-MODELS-NOT-SUPPORTED"
-
-
 # --- build_release_manifest ---
 
 
@@ -167,6 +154,7 @@ def test_build_release_manifest_produces_schema_valid_output():
         },
         answers=_valid_answers(),
         docker_images=_docker_images(),
+        model_artifacts=[],
     )
 
     validate_release_manifest(manifest)  # must not raise
@@ -190,6 +178,31 @@ def test_build_release_manifest_produces_schema_valid_output():
     }
 
 
+def test_build_release_manifest_carries_through_resolved_model_artifacts():
+    resolved_artifact = {
+        "id": "m1",
+        "version": "1.0.0",
+        "checksum": "sha256:" + "a" * 64,
+        "baked_into_image": "app",
+    }
+    answers = _valid_answers()
+    answers["models"] = {"required": True}
+
+    manifest = build_release_manifest(
+        application={"name": "Test App", "slug": "test-app"},
+        version="1.0.0",
+        summary="s",
+        project_path="/repo",
+        git_facts={"commit": "a" * 40, "tag": None, "state": "clean", "remote_url": None},
+        answers=answers,
+        docker_images=_docker_images(),
+        model_artifacts=[resolved_artifact],
+    )
+
+    validate_release_manifest(manifest)  # must not raise — real, frozen schema
+    assert manifest["models"] == {"required": True, "artifacts": [resolved_artifact]}
+
+
 def test_build_release_manifest_uses_remote_url_and_tag_when_present():
     manifest = build_release_manifest(
         application={"name": "Test App", "slug": "test-app"},
@@ -204,6 +217,7 @@ def test_build_release_manifest_uses_remote_url_and_tag_when_present():
         },
         answers=_valid_answers(),
         docker_images=_docker_images(),
+        model_artifacts=[],
     )
 
     assert manifest["source"]["repository"] == "https://example.com/test-app.git"
@@ -223,6 +237,7 @@ def test_build_release_manifest_rejects_insufficient_answers():
             git_facts={"commit": "a" * 40, "tag": None, "state": "clean", "remote_url": None},
             answers=answers,
             docker_images=_docker_images(),
+            model_artifacts=[],
         )
 
 
@@ -235,6 +250,7 @@ def test_no_images_fails_manifest_schema_minitems():
         git_facts={"commit": "a" * 40, "tag": None, "state": "clean", "remote_url": None},
         answers=_valid_answers(),
         docker_images=[],
+        model_artifacts=[],
     )
 
     with pytest.raises(ReleaseManifestSchemaError) as exc_info:
