@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 
-from rah_platform.models import applications, deployment_configuration, deployments, release_storage, releases
+from rah_platform.models import applications, deployment_configuration, deployments, reconciliations, release_storage, releases
 
 PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = PLATFORM_ROOT.parent
@@ -183,6 +183,29 @@ def seed_deployment_configuration(
                 secret=secret,
                 secret_reference=f"secret-ref:{key}" if secret else None,
                 source=source,
+            )
+        )
+
+
+def seed_reconciliation(
+    engine, *, application_id: str, status: str, recorded_release: str | None = None, observed_release: str | None = None, drift_items: list | None = None
+) -> None:
+    """Inserts a `reconciliations` row directly — `PL9b`'s real offline
+    acceptance testing found that `RECOVER` availability needed a second
+    real trigger beyond a failed `INSTALL`/`UPDATE` (drift detected with
+    no failed operation behind it); this seeds that trigger directly for
+    unit tests, matching the other seed helpers' own "don't require the
+    full real operation just to exercise the decision path" precedent.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            reconciliations.insert().values(
+                application_id=application_id,
+                status=status,
+                recorded_release=recorded_release,
+                observed_release=observed_release,
+                drift_items=drift_items or [],
+                recorded_at=datetime.now(timezone.utc),
             )
         )
 

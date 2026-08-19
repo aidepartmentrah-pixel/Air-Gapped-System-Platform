@@ -220,7 +220,7 @@ def restore_backup(engine, config: Config, *, application_id: str, backup_id: st
 # --- Recover Application (§6.36, §7.24) ---
 
 
-def _execute_recovery(engine, config: Config, operation_id: str, application_id: str, failed_operation_id: str, backup_id: str, recovery_mode: str) -> None:
+def _execute_recovery(engine, config: Config, operation_id: str, application_id: str, failed_operation_id: str | None, backup_id: str, recovery_mode: str) -> None:
     try:
         with engine.connect() as conn:
             backup_row = _resolve_backup(conn, backup_id, application_id)
@@ -244,15 +244,23 @@ def _execute_recovery(engine, config: Config, operation_id: str, application_id:
 
 
 def recover_application(
-    engine, config: Config, *, application_id: str, failed_operation_id: str, backup_id: str,
+    engine, config: Config, *, application_id: str, failed_operation_id: str | None = None, backup_id: str,
     recovery_mode: str = "RESTORE_PREVIOUS_STATE", requested_by: str, reason: str | None = None,
 ) -> dict:
     """The broader, application-facing entry point (`POST
     .../applications/{id}/recover`, §6.36) — validates the recovery
-    context (a real failed lifecycle operation, `RECOVER` actually
-    allowed per `application_query.get_available_actions`) before
-    delegating to the same real restore implementation
-    `restore_backup` uses.
+    context (`RECOVER` actually allowed per `application_query
+    .get_available_actions`) before delegating to the same real restore
+    implementation `restore_backup` uses.
+
+    `failed_operation_id` is optional — real `PL9b` offline acceptance
+    testing found that requiring one made drift-triggered recovery
+    (host drift detected with no failed operation behind it, e.g. a
+    manually stopped container) permanently unreachable, even though
+    `get_available_actions` now correctly allows `RECOVER` for that case
+    too (see `application_query._evaluate_recover`). When supplied, it
+    is still validated for real; when omitted, the broader
+    `RECOVER`-availability check below is the only gate.
     """
     if recovery_mode not in _SUPPORTED_RECOVERY_MODES:
         raise RecoveryUnsupportedError(
@@ -260,12 +268,13 @@ def recover_application(
             details={"recovery_mode": recovery_mode, "supported": sorted(_SUPPORTED_RECOVERY_MODES)},
         )
 
-    failed_operation = operations.get_operation(engine, failed_operation_id)
-    if failed_operation["application_id"] != application_id or failed_operation["status"] != "FAILED":
-        raise RecoveryPrerequisitesFailedError(
-            "The referenced operation is not a failed operation for this application.",
-            details={"failed_operation_id": failed_operation_id},
-        )
+    if failed_operation_id is not None:
+        failed_operation = operations.get_operation(engine, failed_operation_id)
+        if failed_operation["application_id"] != application_id or failed_operation["status"] != "FAILED":
+            raise RecoveryPrerequisitesFailedError(
+                "The referenced operation is not a failed operation for this application.",
+                details={"failed_operation_id": failed_operation_id},
+            )
 
     actions = application_query.get_available_actions(engine, application_id)
     recover_action = next(a for a in actions["actions"] if a["action"] == "RECOVER")

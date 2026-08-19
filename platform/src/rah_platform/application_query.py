@@ -28,7 +28,7 @@ from rah_platform.errors import (
     ReleaseBelongsToAnotherApplicationError,
     ReleaseNotFoundError,
 )
-from rah_platform.models import applications, deployments, operations, releases, release_storage
+from rah_platform.models import applications, deployments, operations, reconciliations, releases, release_storage
 
 
 def get_application_row(conn, application_id: str):
@@ -296,9 +296,37 @@ def _get_last_lifecycle_operation_row(conn, application_id: str):
     ).mappings().first()
 
 
-def _evaluate_recover(last_lifecycle_operation_row) -> dict:
-    if last_lifecycle_operation_row is None or last_lifecycle_operation_row["status"] != "FAILED":
-        return _blocked("RECOVER", [{"code": "PLT-RECOVERY-001", "message": "There is no failed operation to recover from."}])
+_DRIFT_STATUSES = {"DRIFT_DETECTED", "PARTIALLY_RUNNING", "UNREACHABLE"}
+
+
+def _get_last_reconciliation_row(conn, application_id: str):
+    """The most recent recorded reconciliation for this application, if
+    any — `RECOVER`'s *second* real trigger, found missing during real
+    `PL9b` offline acceptance testing: host drift introduced by something
+    other than a failed `INSTALL`/`UPDATE` (a manually stopped container,
+    for instance — exactly the plan's own "deliberately introduce host
+    drift... execute controlled recovery" scenario) left `RECOVER`
+    permanently blocked under the original single-trigger design, even
+    though real drift was genuinely, correctly detected. Recovery is now
+    available from *either* a real failed lifecycle operation or real
+    detected drift — both are legitimate "something needs correcting"
+    signals, matching §7.1's Three-Authority Model treating Host
+    Inspection as authoritative in its own right, not subordinate to
+    operation history.
+    """
+    return conn.execute(
+        reconciliations.select()
+        .where(reconciliations.c.application_id == application_id)
+        .order_by(reconciliations.c.recorded_at.desc())
+        .limit(1)
+    ).mappings().first()
+
+
+def _evaluate_recover(last_lifecycle_operation_row, last_reconciliation_row) -> dict:
+    failed_operation = last_lifecycle_operation_row is not None and last_lifecycle_operation_row["status"] == "FAILED"
+    drifted = last_reconciliation_row is not None and last_reconciliation_row["status"] in _DRIFT_STATUSES
+    if not failed_operation and not drifted:
+        return _blocked("RECOVER", [{"code": "PLT-RECOVERY-001", "message": "There is no failed operation or detected drift to recover from."}])
     return _allowed("RECOVER", requirements=["MANDATORY_VERIFICATION"])
 
 
@@ -307,6 +335,7 @@ def get_available_actions(engine, application_id: str, target_release_id: str | 
         application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
         last_lifecycle_operation_row = _get_last_lifecycle_operation_row(conn, application_id)
+        last_reconciliation_row = _get_last_reconciliation_row(conn, application_id)
 
         active_release_row = None
         if active_deployment_row:
@@ -332,7 +361,7 @@ def get_available_actions(engine, application_id: str, target_release_id: str | 
             _evaluate_reinstall(active_deployment_row, target_release_row),
             _evaluate_verify(active_deployment_row),
             _evaluate_backup(active_deployment_row),
-            _evaluate_recover(last_lifecycle_operation_row),
+            _evaluate_recover(last_lifecycle_operation_row, last_reconciliation_row),
         ]
 
     return {

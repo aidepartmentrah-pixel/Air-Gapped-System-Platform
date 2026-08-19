@@ -197,12 +197,15 @@ class RestoreBackupRequest(BaseModel):
 class RecoverApplicationRequest(BaseModel):
     """Matches architecture §4.21. `application_id` comes from the URL
     path. `recovery_mode` — only `RESTORE_PREVIOUS_STATE` is implemented
-    in Period A (see `recovery.py`'s own docstring).
+    in Period A (see `recovery.py`'s own docstring). `failed_operation_id`
+    is optional — recovery may also be triggered by real detected drift
+    with no failed operation behind it (see `recovery.py`'s own
+    docstring for why, found during real `PL9b` offline testing).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    failed_operation_id: str
+    failed_operation_id: str | None = None
     backup_id: str
     recovery_mode: str = "RESTORE_PREVIOUS_STATE"
     requested_by: str = "operator:unknown"

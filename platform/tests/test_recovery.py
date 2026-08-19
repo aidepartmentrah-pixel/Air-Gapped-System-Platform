@@ -124,6 +124,54 @@ def test_recovery_after_failed_update_restores_host_state(db_engine, tmp_path, _
     assert failed_again["status"] == "FAILED"
 
 
+# --- Recovery from real drift with no failed operation (PL9b finding) ---
+
+
+def test_recovery_from_drift_without_a_failed_operation(db_engine, tmp_path, _teardown_compose_projects):
+    """Found during real `PL9b` offline acceptance testing: the plan's
+    own scenario deliberately introduces host drift (a manually stopped
+    container) with no failed `INSTALL`/`UPDATE` anywhere in sight, then
+    expects recovery to be available. `failed_operation_id` must be
+    genuinely optional, not just accepted-but-unused.
+    """
+    config = _config(tmp_path)
+    _teardown_compose_projects.append("rah-golden-test-app")
+
+    imported = _import_golden_release(db_engine, config, "valid-release-1.1.0")
+    application_id = imported["application"]["id"]
+    install_result = installation.install_application(
+        db_engine, config, release_id=imported["release_id"], configuration={"APP_PORT": {"value": 19505}}, requested_by="operator:test"
+    )
+    final = wait_for_terminal_operation(db_engine, install_result["operation_id"])
+    assert final["status"] == "SUCCEEDED"
+
+    backup_result = backup.create_backup(
+        db_engine, config, application_id=application_id, backup_type="DATABASE", verify_after_creation=True, requested_by="operator:test"
+    )
+    wait_for_terminal_operation(db_engine, backup_result["operation_id"])
+    backup_id = backup.list_backups(db_engine, application_id)["items"][0]["backup_id"]
+
+    # real drift, nothing failed
+    client = _docker_client()
+    for c in client.containers.list(filters={"label": "com.docker.compose.project=rah-golden-test-app"}):
+        c.stop()
+    reconciliation = verification.reconcile_application_state(db_engine, application_id)
+    assert reconciliation["status"] == "DRIFT_DETECTED"
+
+    actions = application_query.get_available_actions(db_engine, application_id)
+    recover_action = next(a for a in actions["actions"] if a["action"] == "RECOVER")
+    assert recover_action["allowed"] is True
+
+    recovery_result = recovery.recover_application(
+        db_engine, config, application_id=application_id, backup_id=backup_id, requested_by="operator:test"
+    )
+    recovery_final = wait_for_terminal_operation(db_engine, recovery_result["operation_id"], timeout=60)
+    assert recovery_final["status"] == "SUCCEEDED"
+
+    reconciliation_after = verification.reconcile_application_state(db_engine, application_id)
+    assert reconciliation_after["status"] == "CONSISTENT"
+
+
 # --- Standalone Backup Restore ---
 
 
