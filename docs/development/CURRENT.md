@@ -95,10 +95,12 @@ same image-tag bug — that proof never did a genuine cross-machine
 `docker load`, so it's likely affected too; P9's fleet retest will
 naturally re-surface this for all 5 apps.
 
-Platform track: `PL0` through `PL9a` done and tested (see "Period A —
+Platform track: `PL0` through `PL9b` done and tested (see "Period A —
 Platform" below for the real, slice-by-slice detail). `PL9b` (Offline VM
-Acceptance) is the one remaining piece before Platform's Period A plan
-closes — not yet started as of the last verified record.
+Acceptance) ran the full 23-step Offline Acceptance Scenario for real on
+the genuinely air-gapped Offline Validation VM, found and fixed a real
+`RECOVER`-availability gap live, and closed the entire Platform track's
+Period-A Exit Gate — no Platform work remains open.
 
 ## Open Items (status as of 18/08/2026, verified directly — not relayed)
 
