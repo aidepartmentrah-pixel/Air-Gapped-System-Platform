@@ -2,14 +2,93 @@
 
 ## Current Phase
 
-Period A, Packager track. Release Contract V1 is **FROZEN** (user-confirmed).
-Packager `P0`–`P7` are automated-portion-done — `P7` (Validation,
-Finalization and Independent Offline Proof) finished `rah package`/
-`rah validate` (56 RC-* rules, checksums, Compliance Report, atomic
-finalization), built, tested, and live-proven against the real built
-container and real HCopilot. **Remaining**: the Real Manual Acceptance
-Test itself (copy a finalized Release to a real Offline Debian VM,
-install, verify) — not yet scoped with the user.
+Period A has two independent tracks. Release Contract V1 remains
+**FROZEN** (user-confirmed).
+
+Packager `P0`–`P7` are automated-portion-done. **The Real Manual
+Acceptance Test has been executed** (2026-08-11, real Indicator app, real
+lab hardware) and **FAILED at Phase 1**: `rah package` correctly rejected
+the candidate at `RC-SCR-005` — Indicator's own lifecycle scripts were
+committed to Git without the executable bit, a real gap in the Indicator
+repo, not the Packager. Full results:
+`docs/development/Period A — Independent Product Development;
+Packager/3. Real Manual Acceptance Test — Results.md`.
+
+**`RC-SCR-005` is now fixed** (18/08/2026, on this Windows engineering
+workstation, committed and pushed to Indicator's `master`) — see "Open
+Items" below for this and four other real fixes done the same day.
+**Phases 2–6 (Transfer → independent re-validate → Install → Verify →
+Restart) are the real next step**, not blocked on anything structural
+anymore, though the newest Packager-side code (see Open Items) still
+needs to be committed and pushed before a from-scratch re-run elsewhere
+would see it.
+
+Platform track: `PL0` through `PL9a` done and tested (see "Period A —
+Platform" below for the real, slice-by-slice detail). `PL9b` (Offline VM
+Acceptance) is the one remaining piece before Platform's Period A plan
+closes — not yet started as of the last verified record.
+
+## Open Items (status as of 18/08/2026, verified directly — not relayed)
+
+**Packager fixes, done the same day, not yet pushed:**
+
+- **`RC-SCR-005`** — fixed. Not a filesystem permission issue but a git
+  *index mode* issue (git's own tracked executable-bit flag for a file,
+  independent of the real filesystem permission) — corrected for all 10
+  of Indicator's scripts, **committed and pushed** to Indicator's own
+  repo. While at it, the same underlying issue was found and fixed
+  proactively in **Voice Project (29 scripts)** and **HCAT (11 scripts)**
+  too — HCopilot and STT-SCHEDULE already had it right.
+- **`RC-OFF-002` sibling-image gap** (HCopilot's `db-init` service
+  reusing `backend`'s image instead of building or pulling its own) —
+  fixed. A service with no `build:` key isn't always an external
+  prebuilt image; it can be reusing a sibling service's build output.
+  Detected by cross-referencing image tags before deciding to pull;
+  wired into the compose-rewrite step; tests added and passing; verified
+  with a real rebuild against HCopilot.
+- **Model-artifacts feature** — built and confirmed working against real
+  HCopilot: computes a `checksum` and resolves `baked_into_image` for a
+  declared model artifact, replacing the previous unconditional "not
+  supported" rejection. Required a real, scoped extension to
+  `engineering-answers.json`'s schema (`source_path`, `service` per
+  artifact) — not a change to the frozen Release Contract itself.
+  Building this surfaced and fixed two more real, previously-unknown
+  bugs:
+  - A placeholder-detection gap — `__GENERATE_ME__` wasn't recognized as
+    a placeholder value, only `change`/`your`/`todo`/`sample`/etc.-style
+    markers were.
+  - A staleness-loop bug — the Packager's own `--output` directory,
+    conventionally nested inside the project being packaged, wasn't
+    excluded from the project's own inspection walk, so its own
+    generated output was silently changing the very fingerprint used to
+    detect staleness.
+- **STT-SCHEDULE / Voice Project / HCAT model-baking fixes** — done,
+  committed. All three apps now bake their model into the image at build
+  time instead of bind-mounting it at runtime, matching the platform
+  rule below. **Pushed**: STT-SCHEDULE (`offline-deployment` branch,
+  not yet merged to `master`) and Indicator (`master`, no separate
+  branch needed — no database/model at all). **Not yet merged to
+  `main`**: Voice Project and HCAT, both on an unmerged
+  `bake-whisper-model` branch (13 and 1 commits ahead, respectively) —
+  deliberately held per the agreed branching policy (merge only once a
+  real `rah package` end-to-end pass confirms the fix), see the
+  `ticklish-marinating-unicorn` plan file.
+- **The "everything must be inside the image by build time" rule** —
+  confirmed merged into the real, canonical `6. RAH Application
+  Engineering Playbook.md` in the Obsidian vault (verified directly:
+  present as new §11a in the long-form Dockerization prompt and §7a in
+  the compressed form). **This repo's own mirrored copy at
+  `docs/rah-lab-standards/6. RAH Application Engineering Playbook.md`
+  has NOT been updated to match** — confirmed absent there too. Needs a
+  follow-up sync pass, copying the real merged text over rather than
+  reconstructing it.
+
+**Sync gap — not a code problem:** all five Packager fixes above exist
+only on this Windows checkout right now (except where explicitly noted
+pushed above). `git fetch` confirms nothing new has arrived from
+elsewhere for the Packager side. Needs a commit + push here before this
+checkout's own history (and any other checkout, e.g. `or-stt`) reflects
+any of it.
 
 ## Architecture
 
@@ -153,11 +232,21 @@ earlier P4/P6 CRLF finding) — all fixed at their root cause. Final,
 clean HCopilot run: every rule passes except the already-documented
 `RC-OFF-002` (prebuilt base images like `sqlserver` aren't bundled
 offline, a known P5/P6 scope gap) — correctly and honestly rejected, not
-papered over. **Not yet done**: the Real Manual Acceptance Test itself
-(copy to a real Offline Debian VM, run `install_offline.sh`, verify
-manually) — needs explicit scoping with the user first. See
+papered over. **Real Manual Acceptance Test executed 2026-08-11, FAILED at
+Phase 1**: real Indicator app, real Legion/`or-stt`/offline-VM lab
+hardware — `rah package` built two real Docker images and a full
+candidate Release, then correctly refused to finalize it at `RC-SCR-005`
+(Indicator's lifecycle scripts committed without the executable bit — a
+real Indicator-repo gap, not a Packager bug). Phases 2–6 not reached; the
+offline VM was never touched. See
 `docs/development/Period A — Independent Product Development;
-Packager/2. Initial Slicing Task Table.md`.
+Packager/3. Real Manual Acceptance Test — Results.md` for the full
+Testing Record and a Packager design note (`rah construct`'s
+`shutil.copy2` at `construct_release.py:127` copies scripts with no
+`chmod` enforcement, so a full Docker build runs before `RC-SCR-005`
+catches this at the very end — cheap to catch earlier). Environment is
+primed for an immediate re-run once Indicator's script permissions are
+fixed and re-committed.
 
 ## Period A — Platform
 
@@ -226,8 +315,157 @@ application, never a fabricated `HEALTHY`, since no real host
 verification exists until `PL7`. 98/98 tests pass total, all 8 required
 `PL4` proofs verified live against the real running Compose container,
 combining a real imported Golden Release with direct Registry seeding
-for the installed-state half. `PL5` (Deployment Planning and
-Configuration) is next. See
+for the installed-state half. **`PL5` (Deployment Planning and
+Configuration) is DONE** — `deployment_planning.py`
+(`prepare_installation`/`prepare_update`/`validate_deployment_inputs`/
+`suggest_available_ports`) plus `deployment_configuration` (migration
+`0006`). Port checks are real `socket.bind()` calls against this host,
+not simulated. `prepare_update` reuses `PL4`'s `get_available_actions()`
+directly for transition validity rather than re-deriving it — the two
+now provably agree by construction. Secret-flagged configuration inputs
+never carry a `current_value`, fresh or preserved, only `value_state`.
+Along the way, `application_query.py`'s three lookup helpers were
+promoted from private to shared internal functions since `PL5` genuinely
+needed them — no behavior change, full suite green before and after.
+113/113 tests pass total, all 10 required `PL5` proofs verified live
+against the real running Compose container, including a real update plan
+showing real preserved configuration and an explicit mandatory-backup
+requirement. **`PL6` (Fresh Installation Execution) is DONE** — the
+Platform's first operation that actually changes host/Docker state.
+`installation.py`: synchronous request/lock validation, then real
+execution in a background thread (real `202` → poll → `SUCCEEDED`/
+`FAILED`, matching §5.3). Real Docker images replaced the placeholder
+tars in the Golden Fixtures; the backend image needed the real `docker`/
+`docker compose` CLI added (a real infrastructure gap found and fixed,
+not worked around — the Platform invokes Manifest-declared scripts
+rather than reimplementing their behavior, per §12.6). Minimal
+verification is real Docker container inspection only — the Release's
+own `verify_deployment.sh` stays `PL7`'s job. A real cross-slice bug was
+found and fixed: `PL5`'s `validate_deployment_inputs` had grown a live
+port check that duplicated `PL6`'s own dedicated recheck and produced
+the wrong error for the Port Conflict test — removed from `PL5`, kept
+only in `PL6` where architecture actually places it (§3.7). 122/122
+tests pass total, all 8 required `PL6` proofs verified live against the
+real running Compose container — including confirming the installed
+container from *outside* the backend container, on the real host's own
+Docker Engine, and `PL4`'s action logic correctly flipping to reflect a
+*real* installation for the first time, not seeded state.
+**`PL7` (Verification and Host Reconciliation) is DONE** — `verification.py`
+completes the three-authority model (Manifest = expected, Registry =
+recorded, Host Inspection = observed). `PL6`'s `_minimal_verify()` is
+retired; `installation.py` now calls the same real `run_verification()`
+a standalone `POST .../verify` call uses, so the two paths can never
+diverge. Real check set: `release_identity`/`container_existence`/
+`container_health`/`image_tags`/`selected_port`/`offline_runtime`/
+`persistent_configuration` mandatory, `database_connectivity`/
+`migration_state`/`backend_health`/`frontend_reachability` honestly
+`NOT_APPLICABLE` unless a Release declares them required — never a
+fabricated `PASS`. New schema (migration `0007`): `verification_runs`/
+`verification_checks` (every run preserved independently, §7.25) and
+`reconciliations` (recorded drift, §7.27). Reconciliation logic reaches
+all five real states (`UNKNOWN`/`CONSISTENT`/`PARTIALLY_RUNNING`/
+`DRIFT_DETECTED`/`UNREACHABLE`) against genuine Docker state changes,
+not mocks. Two real bugs found and fixed before shipping: (1) a
+pre-existing, `PL6`-era fixture bug — `install-with-secret`'s manifest
+still declared the wrong image repository (only the Compose file was
+corrected back in `PL6-I02`) — caught by `PL7`'s own new `image_tags`
+check, not introduced by it; (2) `_resolve_expected_release` returned a
+deployment id instead of resolving the real release id, fixed with a
+dedicated regression test. One deliberate, flagged deviation from
+architecture's literal text: `POST .../verify` runs synchronously
+(`200`), not `202` + poll — verification is a handful of fast checks,
+not a long-running script. 143/143 tests pass total, all 9 required
+`PL7` proofs verified live against the real running Compose container
+through a full scan → import → install → verify → host-state →
+reconcile cycle, including real drift detection after manually stopping
+the container from *outside* the backend container on the host's own
+Docker Engine. **`PL8a` (Backup and Update, the first of two tracked
+`PL8` sub-slices per the pre-PL0 review) is DONE** — `backup.py`/
+`update.py` implement the second major lifecycle transition (existing
+application → new Release, configuration/data preserved). Real
+sequencing per §9.19/§9.22/§9.26: `BACKING_UP` (shares the parent
+`UPDATE` operation's own `operation_id`, per architecture's "Shared
+Operation for Sub-Steps") → `EXECUTING_SCRIPT` → `MIGRATING` (real
+script, real captured exit code as migration evidence) → `VERIFYING`
+(reuses `PL7`'s `run_verification` wholesale) → `RECORDING_RESULT`
+(only after a real `PASS` — an unsuccessful update never overwrites the
+last known successful active-deployment record). New schema (migration
+`0008`): `backups`. Configuration preservation is real: a preserved
+secret's actual value is read back from the previous deployment's real
+rendered `.env` (the Registry itself never stores secret plaintext, only
+`secret_reference`) via a new `installation.read_rendered_env` helper.
+A real, necessary amendment to `PL7`'s `verification.py` was required:
+an update's own `POST_UPDATE` verification runs *before* the Registry
+commit, so two of `PL7`'s checks needed a `verification_type` parameter
+to stop treating the still-pointing-at-the-source Registry state as
+drift. Two real bugs found and fixed before shipping (both in this
+slice's own new code, not `PL7`'s): a config-validation helper that
+re-checked preserved string values against strict Python types, and two
+tests that wrongly expected a raised exception from an async (`202`)
+entry point. 14 new tests added (157/157 total passing), all 7 required
+`PL8a` proofs verified live against the real running Compose container
+through a full scan → import → install → update cycle, including
+confirming the real container now running the target image from
+*outside* the backend container.
+**`PL8b` (Recovery, the second `PL8` sub-slice) is DONE** — `recovery.py`
+implements §7.24 (Recovery History Rule): recovery always creates its
+own, separate operation record, never rewriting the failed operation it
+recovers from. A deliberately simple, real design: recovery never
+changes *which* Release is active, only repairs the *host* back to what
+the Registry already, correctly, still claims — §9.22 already
+guarantees a failed `INSTALL`/`UPDATE` never falsely overwrote the
+active-deployment record, so `_perform_restore` always targets the
+*currently active* deployment and never calls `commit_deployment`.
+`PL4`'s `_evaluate_recover()` — previously a correctly-reasoned
+permanent stub ("no failure-tracking exists until PL8") — now has real
+logic: `RECOVER` is allowed exactly when the application's most recent
+`INSTALL`/`UPDATE` operation is `FAILED`. A real bug caught by the test
+itself, not by inspection: the first draft of `valid-release-1.0.0`'s
+new restore script only restored configuration, not the actual
+container — insufficient for the real "verification failed after the
+update script already swapped the container" scenario, caught because
+`reconcile_application_state` still reported `DRIFT_DETECTED` after a
+"successful" recovery; fixed with a real, complete restore (`docker
+load` + `docker compose up` against the *active* deployment's real
+`.env`). 6 new tests added (163/163 total passing), all required proofs
+verified live against the real running Compose container — including a
+real failed update genuinely flipping `RECOVER` from `false` to `true`,
+and a real recovery repairing real host drift back to `CONSISTENT`
+while the original failure remains visibly `FAILED` in history.
+**`PL9a` (Operator UI Integration, the first of two tracked `PL9`
+sub-slices) is DONE** — a real React 19 + TypeScript + Vite +
+TailwindCSS v4 + shadcn/ui (Radix) + TanStack Router/Query + React Hook
+Form + Zod UI at `platform/frontend/`, matching the UX architecture
+spec's exact dark palette, layout, and screens. Every screen is wired to
+the real API, no mocked data: Dashboard, Platform (scan/import),
+Applications, Application Details (`Overview`/`Releases`/`History`/
+`Settings`), a real 4-step Installation Wizard, an Update flow, a
+reusable `ProgressView` (live log, auto-scroll), and an
+`ErrorPresentation` component covering the full `PLT-*` catalog with
+Title/Possible Cause/Suggested Action/collapsed Technical Details —
+never a raw exception. One real backend gap found and closed (not
+approximated client-side): added `GET /api/v1/operations` (cross-app
+listing) with 2 new tests (165/165 backend tests passing). Every
+required user journey was live-driven with a real headless browser
+(Playwright) against the real backend — Dashboard, Release Import
+(success and a real `PLT-INTEGRITY-002` error path), Fresh Install (real
+`docker load`+`compose up`, real container confirmed via `docker ps`
+from outside the backend container), History — catching one real bug
+(a cache-invalidation gap that hid a genuinely-succeeded `Verify`
+operation from the "Recent Operations" panel) before it shipped. Also
+found and fixed, mid-slice, a real host-level infrastructure fault
+unrelated to this session's own work: Docker's default bridge went down
+due to the Windscribe VPN client's kill-switch nftables rules
+conflicting with Docker's NAT rules, diagnosed from scratch (with the
+user running sudo diagnostics) down to the exact conflicting chains and
+fixed by disconnecting the VPN — this had been silently blocking the
+entire backend test suite, not just PL9a's own work. The frontend is
+also genuinely deployable, not just a dev server: a multi-stage
+Dockerfile (`npm run build` → nginx) wired into `docker-compose.yml` as
+a new `frontend` service, live-verified serving the real production
+build and correctly proxying real API calls through the Compose
+network. `PL9b` (Offline VM Acceptance) is next — needs the actual
+Offline Debian VM, scoping with the user pending. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -261,15 +499,21 @@ Status: NOT STARTED
    Artifact Preparation, `rah build`), `P6` (Release Construction,
    `rah construct`), and `P7`'s automated portion (Validation and
    Finalization, `rah package`/`rah validate`) all done and tested. The
-   Real Manual Acceptance Test (offline VM install) remains, needs
-   scoping with the user. See
+   Real Manual Acceptance Test executed 2026-08-11 against real Indicator
+   and real lab hardware, FAILED at Phase 1 on an Indicator-repo defect
+   (non-executable lifecycle scripts), Phases 2–6 not reached. See
    `docs/development/Period A — Independent Product Development;
-   Packager/2. Initial Slicing Task Table.md`. Platform track: slicing
+   Packager/3. Real Manual Acceptance Test — Results.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
    Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
-   Discovery), `PL3` (Release Import and Registry), and `PL4`
-   (Application State and Action Intelligence) done and tested, `PL5`
-   (Deployment Planning and Configuration) next — see
+   Discovery), `PL3` (Release Import and Registry), `PL4` (Application
+   State and Action Intelligence), `PL5` (Deployment Planning and
+   Configuration), `PL6` (Fresh Installation Execution), `PL7`
+   (Verification and Host Reconciliation), `PL8a` (Backup and Update),
+   `PL8b` (Recovery), and `PL9a` (Operator UI Integration) done and
+   tested — all of `PL8` is complete and the UI now performs the same
+   operations as the API, `PL9b` (Offline VM Acceptance) next, needs the
+   actual Offline Debian VM, scoping with the user pending — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 
@@ -331,22 +575,30 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-None on further coding. `P7`'s automated portion (`rah package`/
-`rah validate`) is done. The remaining piece — the Real Manual Acceptance
-Test against a real Offline Debian VM — is blocked on scoping with the
-user: which VM/environment to use, which acceptance app, and whether to
-accept the known `RC-OFF-002` gap (prebuilt base images not bundled
-offline) for this proof or treat it as something to close first.
+The Indicator-repo fix that blocked this is done (see "Open Items"
+above). **Current actual blocker: nothing structural** — just sequencing.
+In order: (1) commit and push the newest Packager code (model-artifacts
+feature, `RC-OFF-002` sibling-image fix, the two bonus bug fixes) so it
+exists anywhere other than this one machine; (2) decide on the two
+unmerged `bake-whisper-model` branches (Voice Project, HCAT) plus
+STT-SCHEDULE's unmerged `offline-deployment` branch; (3) re-run the Real
+Manual Acceptance Test from Phase 1 with Indicator's real fix in place,
+continue into Phases 2–6 if Phase 1 passes. See the short task list in
+`docs/development/Period A — Independent Product Development;
+Packager/2. Initial Slicing Task Table.md` for the concrete sequence.
 
 ## Next Major Gate
 
-The Real Manual Acceptance Test: copy a real finalized Release to a real
-Offline Debian VM, run its own `install_offline.sh`, manually verify the
-application starts — the last piece of the Period A Packager Exit Gate
-("a real application can be initialized, inspected, assisted through
-Claude, planned, built, packaged, validated, finalized, manually
-installed offline, and a second Release can be produced without
-corrupting version history").
+The Real Manual Acceptance Test, Phases 1–6, re-run from the top now that
+`RC-SCR-005` is fixed: package Indicator for real, transfer the finalized
+Release to `Offline-AirGapped-Simulator`, `rah validate` it independently,
+run its own `install_offline.sh`, manually verify the application starts,
+restart-check — the last piece of the Period A Packager Exit Gate ("a
+real application can be initialized, inspected, assisted through Claude,
+planned, built, packaged, validated, finalized, manually installed
+offline, and a second Release can be produced without corrupting version
+history"). The first attempt (2026-08-11) failed at Phase 1 on a
+source-repo defect, not a Packager defect, now fixed — see above.
 
 ## Future Design Tasks (not yet started)
 
