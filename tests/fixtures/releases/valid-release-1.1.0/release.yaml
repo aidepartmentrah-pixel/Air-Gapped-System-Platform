@@ -26,13 +26,18 @@ deployment:
   compose_project_name: rah-golden-test-app
   entrypoints:
     install: install_offline.sh
+    update: update_offline.sh
     verify: verify_deployment.sh
+    backup: backup_database.sh
+    restore: restore_database.sh
   supported_operations:
     fresh_install: true
-    update: false
+    update: true
     downgrade: false
     reinstall: false
-  transition: {}
+  transition:
+    accepted_installed_versions:
+    - 1.0.0
 configuration:
   template: configuration/app.env.template
   inputs:
@@ -51,9 +56,21 @@ docker:
     archive: docker-images/backend.tar
     required: true
 database:
-  required: false
+  required: true
+  platform: sqlite
+  deployment_mode: application_managed
+  target_schema_version: 1.1.0
+  migration:
+    required_for_update: true
+    entrypoint: migrate.sh
+  backup_before_update:
+    required: true
+    entrypoint: backup_database.sh
+  recovery:
+    entrypoint: restore_database.sh
 persistent_state:
-  preserve_during_update: []
+  preserve_during_update:
+  - production_configuration
 offline_requirements:
   public_internet_required: false
   public_registry_required: false

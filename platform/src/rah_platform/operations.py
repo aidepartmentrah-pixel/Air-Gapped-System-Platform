@@ -240,6 +240,41 @@ def get_operation(engine: Engine, operation_id: str) -> dict:
     }
 
 
+def list_operations(engine: Engine, *, status: str | None = None, limit: int = 50) -> dict:
+    """A real, cross-application listing — added for `PL9a`'s Dashboard
+    ("Running Operations" count, "Recent Activity" feed), neither of
+    which the architecture's own per-application-scoped endpoints could
+    honestly answer. Ordered most-recent-first, matching every other
+    "recent activity" listing in this codebase.
+    """
+    query = operations.select().order_by(operations.c.created_at.desc()).limit(limit)
+    if status:
+        query = query.where(operations.c.status == status)
+    with engine.connect() as conn:
+        rows = conn.execute(query).mappings().all()
+    return {
+        "items": [
+            {
+                "operation_id": row["operation_id"],
+                "operation_type": row["operation_type"],
+                "application_id": row["application_id"],
+                "status": row["status"],
+                "stage": row["stage"],
+                "requested_by": row["requested_by"],
+                "error": row["error"],
+                "created_at": row["created_at"].isoformat(),
+                "started_at": row["started_at"].isoformat() if row["started_at"] else None,
+                "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
+                "links": {
+                    "events": f"/api/v1/operations/{row['operation_id']}/events",
+                    "logs": f"/api/v1/operations/{row['operation_id']}/logs",
+                },
+            }
+            for row in rows
+        ]
+    }
+
+
 def get_operation_events(engine: Engine, operation_id: str) -> dict:
     with engine.connect() as conn:
         _require_operation_row(conn, operation_id)

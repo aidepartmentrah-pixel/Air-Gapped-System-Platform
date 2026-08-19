@@ -58,6 +58,16 @@ class DatabaseConnectionError(PlatformError):
 
 
 class MigrationFailedError(PlatformError):
+    """§8.19's own category comment: "These errors may refer either to
+    the Platform Registry or the application database" — `PLT-DATABASE-002`
+    is deliberately dual-use by the architecture's own design, not a
+    reuse-of-convenience. `PL0` raises this for the Platform's own Alembic
+    migrations; `PL8` (`update.py`) raises the same class for a Release's
+    declared `database.migration.entrypoint` script failing during a real
+    update — both are genuinely "Migration failed," just at different
+    layers.
+    """
+
     code = "PLT-DATABASE-002"
     category = "DATABASE"
     retryable = False
@@ -282,3 +292,335 @@ class ReleaseBelongsToAnotherApplicationError(PlatformError):
     category = "RELEASE"
     retryable = False
     http_status = 422
+
+
+# --- PL6: Fresh Installation Execution ---
+
+
+class ApplicationAlreadyInstalledError(PlatformError):
+    code = "PLT-APPLICATION-002"
+    category = "APPLICATION"
+    retryable = False
+    http_status = 409
+
+
+class ReleaseNotAvailableError(PlatformError):
+    code = "PLT-RELEASE-002"
+    category = "RELEASE"
+    retryable = False
+    http_status = 422
+
+
+class FreshInstallUnsupportedError(PlatformError):
+    code = "PLT-TRANSITION-001"
+    category = "TRANSITION"
+    retryable = False
+    http_status = 422
+
+
+class DeploymentConfigurationInvalidError(PlatformError):
+    code = "PLT-INSTALL-002"
+    category = "INSTALL"
+    retryable = False
+    http_status = 422
+
+
+class PortUnavailableError(PlatformError):
+    code = "PLT-CONFIG-004"
+    category = "CONFIG"
+    retryable = True
+    http_status = 422
+
+
+class InstallationScriptMissingError(PlatformError):
+    code = "PLT-INSTALL-004"
+    category = "INSTALL"
+    retryable = False
+    http_status = 422
+
+
+class InstallationScriptFailedError(PlatformError):
+    code = "PLT-INSTALL-005"
+    category = "INSTALL"
+    retryable = True
+    http_status = 422
+
+
+class ScriptTimedOutError(PlatformError):
+    code = "PLT-SCRIPT-003"
+    category = "SCRIPT"
+    retryable = True
+    http_status = 422
+
+
+class MandatoryVerificationFailedError(PlatformError):
+    code = "PLT-INSTALL-006"
+    category = "INSTALL"
+    retryable = True
+    http_status = 422
+
+
+class ActiveDeploymentCommitFailedError(PlatformError):
+    """§8.15: "A technically successful host operation could not be
+    committed safely to Platform state. Such a condition requires
+    reconciliation." The script and verification both succeeded — the
+    host really did change — but the Platform couldn't safely record it.
+    Never silently claim success here; `details.reconciliation_required`
+    is always `True`.
+    """
+
+    code = "PLT-INSTALL-007"
+    category = "INSTALL"
+    retryable = False
+    http_status = 500
+
+
+# --- PL7: Verification and Host Reconciliation ---
+
+
+class VerificationRunNotFoundError(PlatformError):
+    """No code in §8.17 (`PLT-VERIFY-001`..`008`) means "verification run
+    not found" — unlike `PLT-STORAGE-004`/`PLT-APPLICATION-001` elsewhere
+    in this file, there is no plausible existing code to reuse here
+    (every `PLT-VERIFY-*` entry is about a check failing, not a lookup
+    failing). Rather than force an ill-fitting reuse, this extends the
+    category with the next number in sequence — a genuine, flagged gap in
+    the frozen catalog, not a redesign. Worth folding into the same later
+    namespace-review discussion as the Packager's `PKG-RUNTIME-*`
+    outliers and this file's own `PLT-STORAGE-004` reuse.
+    """
+
+    code = "PLT-VERIFY-009"
+    category = "VERIFY"
+    retryable = False
+    http_status = 404
+
+
+class NoActiveDeploymentError(PlatformError):
+    """A manual verification call omitted `expected_release_id` and the
+    Application has no active deployment to infer it from (§4.15: "The
+    Platform may infer expected_release_id from the active deployment
+    when omitted"). Distinct from `ApplicationNotFoundError` — the
+    Application genuinely exists, it just has nothing installed yet. No
+    literal "no active deployment" code exists in §8.17's `PLT-VERIFY-*`
+    range (those are all check-failure codes) or elsewhere in the
+    catalog, so this extends `VERIFY` with the next sequential number —
+    the same flagged-gap pattern as `VerificationRunNotFoundError` just
+    above.
+    """
+
+    code = "PLT-VERIFY-010"
+    category = "VERIFY"
+    retryable = False
+    http_status = 422
+
+
+# --- PL8a: Backup and Update ---
+
+
+class ApplicationNotInstalledError(PlatformError):
+    """`PLT-APPLICATION-003` already exists as a *string* inside
+    `application_query.py`'s own `_NOT_INSTALLED` blocking-reason
+    constant (used for the `BACKUP`/`VERIFY` actions' `blocking_reasons`
+    JSON), but was never wired as an actual raised exception class until
+    now — `PL8a`'s standalone `create_backup()` is the first caller that
+    needs to actually *raise* it (a backup with nothing installed to back
+    up cannot proceed at all, not just report itself as unavailable in an
+    actions list).
+    """
+
+    code = "PLT-APPLICATION-003"
+    category = "APPLICATION"
+    retryable = False
+    http_status = 422
+
+
+class UpdatePrerequisitesFailedError(PlatformError):
+    """§8.16 `PLT-UPDATE-001`. The top-level "this update cannot proceed"
+    signal — mirrors `prepare_update`'s own `blocking_issues` list (PL5)
+    exactly: `update_application()` calls the same
+    `get_available_actions()` used by planning, and if `UPDATE` isn't
+    allowed, wraps its specific `blocking_reasons` (already carrying their
+    own precise codes, e.g. `PLT-TRANSITION-003`) in `details` here rather
+    than picking just one to surface as the top-level code.
+    """
+
+    code = "PLT-UPDATE-001"
+    category = "UPDATE"
+    retryable = False
+    http_status = 422
+
+
+class MandatoryBackupFailedError(PlatformError):
+    code = "PLT-UPDATE-002"
+    category = "UPDATE"
+    retryable = True
+    http_status = 422
+
+
+class ConfigurationPreservationFailedError(PlatformError):
+    """A required preserved value (most commonly a secret whose real
+    plaintext only ever lived in the previous deployment's rendered
+    `.env` — the Operational Registry itself never stores it, per §7.16's
+    Secret-State Rule) could not be recovered from the previous
+    deployment during update.
+    """
+
+    code = "PLT-UPDATE-003"
+    category = "UPDATE"
+    retryable = False
+    http_status = 422
+
+
+class UpdateScriptMissingError(PlatformError):
+    code = "PLT-UPDATE-004"
+    category = "UPDATE"
+    retryable = False
+    http_status = 422
+
+
+class UpdateScriptFailedError(PlatformError):
+    code = "PLT-UPDATE-005"
+    category = "UPDATE"
+    retryable = True
+    http_status = 422
+
+
+class PostUpdateVerificationFailedError(PlatformError):
+    code = "PLT-UPDATE-007"
+    category = "UPDATE"
+    retryable = True
+    http_status = 422
+
+
+class UpdateRecoveryRequiredError(PlatformError):
+    """§8.16 `PLT-UPDATE-008` — "The operation partially changed host
+    state and cannot safely continue." The update script and
+    post-update verification both succeeded — the host really is running
+    the new Release — but the Registry commit itself failed, so the
+    Platform cannot safely claim the new deployment is active. Same shape
+    as `ActiveDeploymentCommitFailedError` (`PL6`), but the architecture
+    gives update's own Registry-commit failure a dedicated code rather
+    than reusing install's.
+    """
+
+    code = "PLT-UPDATE-008"
+    category = "UPDATE"
+    retryable = False
+    http_status = 500
+
+
+class BackupUnsupportedError(PlatformError):
+    code = "PLT-BACKUP-001"
+    category = "BACKUP"
+    retryable = False
+    http_status = 422
+
+
+class BackupScriptMissingError(PlatformError):
+    code = "PLT-BACKUP-002"
+    category = "BACKUP"
+    retryable = False
+    http_status = 422
+
+
+class BackupCreationFailedError(PlatformError):
+    code = "PLT-BACKUP-003"
+    category = "BACKUP"
+    retryable = True
+    http_status = 422
+
+
+class BackupArtifactMissingError(PlatformError):
+    """The backup script exited `0` but the artifact it was supposed to
+    produce at the computed `storage_path` does not exist — a real
+    internal-consistency check, not a speculative case: never trust a
+    script's own exit code alone to mean the artifact is genuinely there.
+    """
+
+    code = "PLT-BACKUP-004"
+    category = "BACKUP"
+    retryable = False
+    http_status = 500
+
+
+class BackupNotFoundError(PlatformError):
+    """No code in §8.20 (`PLT-BACKUP-001`..`007`) fits "no backup exists
+    with this id" — every existing `PLT-BACKUP-*` entry is about a
+    creation/verification/ownership failure, not a lookup failure. Same
+    flagged-gap pattern as `VerificationRunNotFoundError` (`PL7`,
+    `PLT-VERIFY-009`) and `NoActiveDeploymentError` (`PL7`,
+    `PLT-VERIFY-010`): extends the category with the next sequential
+    number rather than forcing an ill-fitting reuse.
+    """
+
+    code = "PLT-BACKUP-008"
+    category = "BACKUP"
+    retryable = False
+    http_status = 404
+
+
+# --- PL8b: Recovery ---
+
+
+class BackupBelongsToAnotherApplicationError(PlatformError):
+    """§4.20's `RestoreBackupRequest`: "The Platform shall verify that the
+    backup belongs to the selected application." §7.23 Backup Ownership
+    Rule: "A backup from one application shall not be restored into
+    another application through ordinary Platform operation."
+    """
+
+    code = "PLT-BACKUP-007"
+    category = "BACKUP"
+    retryable = False
+    http_status = 422
+
+
+class RecoveryUnsupportedError(PlatformError):
+    """§4.15's own note: `_evaluate_recover()` (`PL4`) already used this
+    exact code as a *blocking-reason string* for "no failed operation to
+    recover from" — this is that same code, finally wired as a real
+    raised class now that `PL8b` gives it something to actually enforce.
+    """
+
+    code = "PLT-RECOVERY-001"
+    category = "RECOVERY"
+    retryable = False
+    http_status = 422
+
+
+class RecoveryPrerequisitesFailedError(PlatformError):
+    code = "PLT-RECOVERY-002"
+    category = "RECOVERY"
+    retryable = False
+    http_status = 422
+
+
+class RestoreScriptFailedError(PlatformError):
+    code = "PLT-RECOVERY-003"
+    category = "RECOVERY"
+    retryable = True
+    http_status = 422
+
+
+class RecoveryVerificationFailedError(PlatformError):
+    code = "PLT-RECOVERY-004"
+    category = "RECOVERY"
+    retryable = True
+    http_status = 422
+
+
+class PreviousOperationalStateUnavailableError(PlatformError):
+    """§8.21 `PLT-RECOVERY-005`. The backup's own originating deployment
+    record no longer exists to resolve which Release's restore script
+    and manifest to use — a real, if rare, data-integrity gap, not a
+    speculative case (e.g. if a `deployments` row were ever purged
+    independently of its associated `backups` row, which `PL8a`'s own
+    `backups.deployment_id` FK deliberately allows via `ON DELETE
+    SET NULL`-equivalent nullability).
+    """
+
+    code = "PLT-RECOVERY-005"
+    category = "RECOVERY"
+    retryable = False
+    http_status = 500

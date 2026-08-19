@@ -21,6 +21,17 @@
 *_Release_*/
 docker-images/*.tar
 
+# Exception: the Platform's own Golden Release Fixtures under
+# tests/fixtures/releases/ are deliberately authored, checked-in test
+# data (same category as their release.yaml/checksums, already tracked)
+# — not Packager output. Their docker-images/*.tar archives are small,
+# real, working Docker images the PL6+ test suite genuinely needs on a
+# fresh clone; the broad *.tar / docker-images/*.tar rules above were
+# silently swallowing them (a real gap discovered building PL6 — the
+# committed fixtures had a placeholder tar this whole time, working only
+# because no test ever needed a fresh clone until now).
+!tests/fixtures/releases/**/*.tar
+
 # ─────────────────────────────────────────────────────────────
 # VM / Hyper-V artifacts — snapshots and exports never belong in Git,
 # see docs/infrastructure-reference/golden-baseline.md.

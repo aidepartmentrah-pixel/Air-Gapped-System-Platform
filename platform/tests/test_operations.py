@@ -237,3 +237,34 @@ def test_failed_operation_produces_correlated_error(db_engine):
 
     logs = operations.get_operation_logs(db_engine, op["operation_id"])["logs"]
     assert any(entry["level"] == "ERROR" and "Could not reach Docker." in entry["message"] for entry in logs)
+
+
+# --- List Operations (PL9a — Dashboard) ---
+
+
+def test_list_operations_returns_most_recent_first(db_engine):
+    app_id = _new_application_id(db_engine)
+    first = operations.create_operation(db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test")
+    operations.start_operation(db_engine, first["operation_id"])
+    operations.succeed_operation(db_engine, first["operation_id"])
+
+    second_app_id = _new_application_id(db_engine)
+    second = operations.create_operation(db_engine, operation_type="TEST_OPERATION", application_id=second_app_id, requested_by="operator:test")
+
+    result = operations.list_operations(db_engine)
+    ids_in_order = [item["operation_id"] for item in result["items"]]
+    assert ids_in_order.index(second["operation_id"]) < ids_in_order.index(first["operation_id"])
+
+
+def test_list_operations_filters_by_status(db_engine):
+    app_id = _new_application_id(db_engine)
+    running = operations.create_operation(db_engine, operation_type="TEST_OPERATION", application_id=app_id, requested_by="operator:test")
+    operations.start_operation(db_engine, running["operation_id"])
+
+    other_app_id = _new_application_id(db_engine)
+    pending = operations.create_operation(db_engine, operation_type="TEST_OPERATION", application_id=other_app_id, requested_by="operator:test")
+
+    result = operations.list_operations(db_engine, status="RUNNING")
+    ids = [item["operation_id"] for item in result["items"]]
+    assert running["operation_id"] in ids
+    assert pending["operation_id"] not in ids

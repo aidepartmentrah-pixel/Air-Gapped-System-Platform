@@ -235,9 +235,36 @@ def test_verify_and_backup_require_installed_application(db_engine):
     assert _action(installed["actions"], "BACKUP")["allowed"] is True
 
 
-def test_recover_always_unsupported_with_correct_reasoning(db_engine):
+def test_recover_unsupported_when_no_failed_operation(db_engine):
+    """`PL8b` gives `RECOVER` real logic (a failed `INSTALL`/`UPDATE`
+    makes it available) — this test now covers only the "nothing to
+    recover from" case (no failed operation *and* no detected drift);
+    see `test_recovery.py` for the real-failure case and
+    `test_recover_allowed_when_drift_detected_even_without_failed_operation`
+    below for the drift-triggered case.
+    """
     app_id = seed_application(db_engine)
     result = application_query.get_available_actions(db_engine, app_id)
     recover = _action(result["actions"], "RECOVER")
     assert recover["allowed"] is False
     assert recover["blocking_reasons"][0]["code"] == "PLT-RECOVERY-001"
+
+
+def test_recover_allowed_when_drift_detected_even_without_failed_operation(db_engine):
+    """Found during real `PL9b` offline acceptance testing: drift
+    introduced by something other than a failed operation (a manually
+    stopped container, matching the plan's own "deliberately introduce
+    host drift... execute controlled recovery" scenario) must still make
+    `RECOVER` available — no `INSTALL`/`UPDATE` here ever failed.
+    """
+    from conftest import seed_reconciliation
+
+    app_id = seed_application(db_engine)
+    release_id = seed_release(db_engine, application_id=app_id, version="1.0.0", supported_operations={"fresh_install": True})
+    seed_active_deployment(db_engine, application_id=app_id, release_id=release_id)
+    seed_reconciliation(db_engine, application_id=app_id, status="DRIFT_DETECTED", drift_items=[{"type": "CONTAINER_NOT_RUNNING", "service": "backend"}])
+
+    result = application_query.get_available_actions(db_engine, app_id)
+    recover = _action(result["actions"], "RECOVER")
+    assert recover["allowed"] is True
+    assert recover["blocking_reasons"] == []

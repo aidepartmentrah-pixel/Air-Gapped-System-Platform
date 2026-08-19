@@ -28,10 +28,10 @@ from rah_platform.errors import (
     ReleaseBelongsToAnotherApplicationError,
     ReleaseNotFoundError,
 )
-from rah_platform.models import applications, deployments, releases, release_storage
+from rah_platform.models import applications, deployments, operations, reconciliations, releases, release_storage
 
 
-def _get_application_row(conn, application_id: str):
+def get_application_row(conn, application_id: str):
     row = conn.execute(
         applications.select().where(applications.c.application_id == application_id)
     ).mappings().first()
@@ -43,7 +43,7 @@ def _get_application_row(conn, application_id: str):
     return row
 
 
-def _get_release_row(conn, release_id: str):
+def get_release_row(conn, release_id: str):
     row = conn.execute(releases.select().where(releases.c.release_id == release_id)).mappings().first()
     if row is None:
         raise ReleaseNotFoundError(
@@ -60,7 +60,7 @@ def _get_active_deployment_row(conn, application_row):
     ).mappings().first()
 
 
-def _storage_state(conn, release_row) -> str:
+def get_storage_state(conn, release_row) -> str:
     storage = conn.execute(
         release_storage.select().where(release_storage.c.release_id == release_row["release_id"])
     ).mappings().first()
@@ -68,7 +68,7 @@ def _storage_state(conn, release_row) -> str:
 
 
 def _release_deployment_state(conn, release_row, active_deployment_row) -> str:
-    if _storage_state(conn, release_row) == "REMOVED_FROM_STORAGE":
+    if get_storage_state(conn, release_row) == "REMOVED_FROM_STORAGE":
         return "REMOVED_FROM_STORAGE"
     if active_deployment_row and active_deployment_row["release_id"] == release_row["release_id"]:
         return "ACTIVE"
@@ -90,7 +90,7 @@ def _release_result(conn, release_row, active_deployment_row) -> dict:
         "imported_at": release_row["imported_at"].isoformat(),
         "contract_version": release_row["contract_version"],
         "manifest_schema_version": release_row["manifest_schema_version"],
-        "storage_state": _storage_state(conn, release_row),
+        "storage_state": get_storage_state(conn, release_row),
         "release_fingerprint": release_row["fingerprint"],
         "supported_operations": {
             "fresh_install": bool(supported.get("fresh_install", False)),
@@ -157,13 +157,13 @@ def list_applications(engine) -> dict:
 
 def get_application(engine, application_id: str) -> dict:
     with engine.connect() as conn:
-        row = _get_application_row(conn, application_id)
+        row = get_application_row(conn, application_id)
         return _application_result(conn, row)
 
 
 def list_application_releases(engine, application_id: str) -> dict:
     with engine.connect() as conn:
-        application_row = _get_application_row(conn, application_id)
+        application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
         rows = conn.execute(
             releases.select()
@@ -175,15 +175,15 @@ def list_application_releases(engine, application_id: str) -> dict:
 
 def get_release(engine, release_id: str) -> dict:
     with engine.connect() as conn:
-        release_row = _get_release_row(conn, release_id)
-        application_row = _get_application_row(conn, release_row["application_id"])
+        release_row = get_release_row(conn, release_id)
+        application_row = get_application_row(conn, release_row["application_id"])
         active_deployment_row = _get_active_deployment_row(conn, application_row)
         return _release_result(conn, release_row, active_deployment_row)
 
 
 def get_active_deployment(engine, application_id: str) -> dict | None:
     with engine.connect() as conn:
-        application_row = _get_application_row(conn, application_id)
+        application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
         if active_deployment_row is None:
             return None
@@ -280,17 +280,62 @@ def _evaluate_backup(active_deployment_row) -> dict:
     return _allowed("BACKUP")
 
 
-def _evaluate_recover() -> dict:
-    # No failed-operation/recovery tracking exists until PL8 — always
-    # unsupported for now, per the plan's own "some may always return
-    # unsupported" allowance, with correct reasoning rather than a stub.
-    return _blocked("RECOVER", [{"code": "PLT-RECOVERY-001", "message": "There is no failed operation to recover from."}])
+def _get_last_lifecycle_operation_row(conn, application_id: str):
+    """The most recent `INSTALL`/`UPDATE` operation for this application,
+    if any — `PL8b`'s real trigger for `RECOVER` availability (§7.24:
+    "Recovery only activates on a controlled failure path"). `VERIFY`/
+    `BACKUP`/`RECOVER` operations are deliberately excluded: recovering
+    from a failed *verification-only* or *backup-only* attempt isn't a
+    "restore previous state" scenario the way a failed install/update is.
+    """
+    return conn.execute(
+        operations.select()
+        .where(operations.c.application_id == application_id, operations.c.operation_type.in_(("INSTALL", "UPDATE")))
+        .order_by(operations.c.created_at.desc())
+        .limit(1)
+    ).mappings().first()
+
+
+_DRIFT_STATUSES = {"DRIFT_DETECTED", "PARTIALLY_RUNNING", "UNREACHABLE"}
+
+
+def _get_last_reconciliation_row(conn, application_id: str):
+    """The most recent recorded reconciliation for this application, if
+    any — `RECOVER`'s *second* real trigger, found missing during real
+    `PL9b` offline acceptance testing: host drift introduced by something
+    other than a failed `INSTALL`/`UPDATE` (a manually stopped container,
+    for instance — exactly the plan's own "deliberately introduce host
+    drift... execute controlled recovery" scenario) left `RECOVER`
+    permanently blocked under the original single-trigger design, even
+    though real drift was genuinely, correctly detected. Recovery is now
+    available from *either* a real failed lifecycle operation or real
+    detected drift — both are legitimate "something needs correcting"
+    signals, matching §7.1's Three-Authority Model treating Host
+    Inspection as authoritative in its own right, not subordinate to
+    operation history.
+    """
+    return conn.execute(
+        reconciliations.select()
+        .where(reconciliations.c.application_id == application_id)
+        .order_by(reconciliations.c.recorded_at.desc())
+        .limit(1)
+    ).mappings().first()
+
+
+def _evaluate_recover(last_lifecycle_operation_row, last_reconciliation_row) -> dict:
+    failed_operation = last_lifecycle_operation_row is not None and last_lifecycle_operation_row["status"] == "FAILED"
+    drifted = last_reconciliation_row is not None and last_reconciliation_row["status"] in _DRIFT_STATUSES
+    if not failed_operation and not drifted:
+        return _blocked("RECOVER", [{"code": "PLT-RECOVERY-001", "message": "There is no failed operation or detected drift to recover from."}])
+    return _allowed("RECOVER", requirements=["MANDATORY_VERIFICATION"])
 
 
 def get_available_actions(engine, application_id: str, target_release_id: str | None = None) -> dict:
     with engine.connect() as conn:
-        application_row = _get_application_row(conn, application_id)
+        application_row = get_application_row(conn, application_id)
         active_deployment_row = _get_active_deployment_row(conn, application_row)
+        last_lifecycle_operation_row = _get_last_lifecycle_operation_row(conn, application_id)
+        last_reconciliation_row = _get_last_reconciliation_row(conn, application_id)
 
         active_release_row = None
         if active_deployment_row:
@@ -301,13 +346,13 @@ def get_available_actions(engine, application_id: str, target_release_id: str | 
         target_release_row = None
         target_storage_state = None
         if target_release_id:
-            target_release_row = _get_release_row(conn, target_release_id)
+            target_release_row = get_release_row(conn, target_release_id)
             if target_release_row["application_id"] != application_id:
                 raise ReleaseBelongsToAnotherApplicationError(
                     "The selected Release does not belong to this application.",
                     details={"application_id": application_id, "release_id": target_release_id},
                 )
-            target_storage_state = _storage_state(conn, target_release_row)
+            target_storage_state = get_storage_state(conn, target_release_row)
 
         actions = [
             _evaluate_install(active_deployment_row, target_release_row, target_storage_state),
@@ -316,7 +361,7 @@ def get_available_actions(engine, application_id: str, target_release_id: str | 
             _evaluate_reinstall(active_deployment_row, target_release_row),
             _evaluate_verify(active_deployment_row),
             _evaluate_backup(active_deployment_row),
-            _evaluate_recover(),
+            _evaluate_recover(last_lifecycle_operation_row, last_reconciliation_row),
         ]
 
     return {
