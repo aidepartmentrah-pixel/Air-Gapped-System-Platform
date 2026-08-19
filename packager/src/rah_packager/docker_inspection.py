@@ -23,7 +23,13 @@ from rah_packager.errors import MalformedComposeError
 # Directories that are never worth walking into looking for Dockerfiles —
 # pruned before descent (not just filtered after) so a real repo's
 # node_modules/.venv doesn't turn this into a slow, pointless full walk.
-_IGNORED_DIR_NAMES = {".git", ".rah", "node_modules", ".venv", "venv", "__pycache__"}
+_IGNORED_DIR_NAMES = {
+    ".git", ".rah", "node_modules", ".venv", "venv", "__pycache__",
+    # Same reasoning as application_resources_inspection.py's copy of this
+    # set: the Packager's own --output directory, conventionally nested
+    # inside the project, must never feed back into its own inspection.
+    "release_packager",
+}
 
 _COMPOSE_FILE_NAMES = (
     "docker-compose.yml",

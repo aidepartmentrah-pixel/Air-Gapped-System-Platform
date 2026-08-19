@@ -71,7 +71,7 @@ _MINIMUM_CHECKSUM_COVERAGE_DIRS = (
 # substring, rather than trying to enumerate every exact placeholder
 # string up front.
 _PLACEHOLDER_MARKERS = re.compile(
-    r"change|replace|your[_-]?|todo|sample|example|placeholder|xxx|dummy|<.*>|\$\{",
+    r"change|replace|your[_-]?|todo|sample|example|placeholder|xxx|dummy|generate|<.*>|\$\{",
     re.IGNORECASE,
 )
 

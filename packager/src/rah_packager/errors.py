@@ -406,6 +406,29 @@ class DockerBuildFailedError(PackagerError):
         return result
 
 
+class DockerPullFailedError(PackagerError):
+    """A declared service's prebuilt base image (no `build:` key — e.g. a
+    database or reverse-proxy image) could not be pulled for offline
+    bundling. Closes the RC-OFF-002 gap: a service the Packager didn't
+    build still needs its own local archive, which means pulling it
+    first. Distinct from DockerBuildFailedError (no Dockerfile involved).
+    """
+
+    def __init__(self, service: str, image_ref: str, detail: str):
+        super().__init__(
+            code="PKG-DOCKER-PULL-FAILED",
+            message=f"Pulling prebuilt image {image_ref!r} for service {service!r} failed: {detail}",
+        )
+        self.service = service
+        self.image_ref = image_ref
+
+    def to_dict(self) -> dict:
+        result = super().to_dict()
+        result["service"] = self.service
+        result["image_ref"] = self.image_ref
+        return result
+
+
 class DockerImageExportError(PackagerError):
     """A successfully built image could not be exported/saved to a `.tar`
     archive — disk full, permissions, etc, at the filesystem level.
@@ -532,23 +555,55 @@ class ReleaseManifestIncompleteError(PackagerError):
         )
 
 
-class ReleaseModelArtifactsNotSupportedError(PackagerError):
-    """`models.required: true` with declared artifacts — computing
-    `baked_into_image`/`checksum` and associating each artifact with the
-    Docker image it's baked into is genuinely unimplemented (matches
-    HCAT's own deferral for the same reason: multi-model complexity, see
-    docs/development/CURRENT.md, "Acceptance decision"). Deliberately not
-    guessed or fabricated.
+class ModelSourcePathNotFoundError(PackagerError):
+    """A declared model artifact's `source_path` doesn't exist in the
+    source repo — a real gap in the engineering answers (the answers
+    claimed a file/directory that isn't actually there), not a Packager
+    bug. Checked before the Docker build, so a bad path fails fast instead
+    of wasting a real build.
     """
 
-    def __init__(self):
+    def __init__(self, artifact_id: str, source_path: str):
         super().__init__(
-            code="PKG-MANIFEST-MODELS-NOT-SUPPORTED",
+            code="PKG-MANIFEST-MODEL-SOURCE-NOT-FOUND",
             message=(
-                "Constructing a Release with declared model artifacts is not yet "
-                "supported (matches HCAT's deferral — see CURRENT.md)."
+                f"Model artifact {artifact_id!r} declares source_path {source_path!r}, "
+                "which does not exist in the project."
             ),
         )
+        self.artifact_id = artifact_id
+        self.source_path = source_path
+
+    def to_dict(self) -> dict:
+        result = super().to_dict()
+        result["artifact_id"] = self.artifact_id
+        result["source_path"] = self.source_path
+        return result
+
+
+class ModelServiceNotBuiltError(PackagerError):
+    """A declared model artifact's `service` doesn't match any service
+    this Release actually exported a Docker image for — the model has
+    nowhere real to be "baked into". Checked after the Docker build, once
+    the real docker.images[] list is known.
+    """
+
+    def __init__(self, artifact_id: str, service: str):
+        super().__init__(
+            code="PKG-MANIFEST-MODEL-SERVICE-NOT-BUILT",
+            message=(
+                f"Model artifact {artifact_id!r} declares service {service!r}, which "
+                "has no exported Docker image in this Release."
+            ),
+        )
+        self.artifact_id = artifact_id
+        self.service = service
+
+    def to_dict(self) -> dict:
+        result = super().to_dict()
+        result["artifact_id"] = self.artifact_id
+        result["service"] = self.service
+        return result
 
 
 class ReleaseConstructionWriteError(PackagerError):

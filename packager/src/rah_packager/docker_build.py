@@ -9,14 +9,40 @@ are. Nothing here reads or writes `.rah/project-state.json`; `rah build`
 does not require `rah init` to have run first, and there is deliberately
 no "project not initialized" gate in this slice (unlike P4).
 
-Scope, checked against the P5 spec's own wording ("Docker image build",
-not "docker pull"): only Compose services that declare their own
-`build:` context are built and exported. A service that only references
-a prebuilt `image:` (e.g. a base database image) is reported in the
-inventory but not built, tagged, or exported here — the Packager didn't
-produce that image, so building/exporting it is out of this slice's
-scope (possibly P6's job, possibly out of scope entirely; not decided
-here).
+Scope: Compose services that declare their own `build:` context are
+built and exported. A service that only references a prebuilt `image:`
+(e.g. a base database image, `nginx`, `pgadmin`) is *pulled* and
+exported instead — the Packager didn't produce that image, but
+RC-OFF-002 ("every Compose service's image has a local offline archive")
+doesn't care who produced it, only that a local archive exists. Pulled
+images are never retagged: the archive is captured under the image's own
+original reference, and the Compose file is left untouched for these
+services (unlike built services, which get their `build:` stanza
+rewritten to the new `image:` tag in construct_release.py — a pulled
+image's `image:` reference was already correct).
+
+One more case, found against a real app (HCopilot): a service with no
+`build:` key isn't always an *external* prebuilt image — it can instead
+be reusing another service's build output (e.g. a one-shot `db-init`
+service declaring the same `image:` tag the app's own `backend` service
+builds, so both run from one image without building it twice). Pulling
+that tag fails outright (it was never published anywhere; it only ever
+exists locally, once `backend` builds it) and even if a same-named public
+image existed, it'd be the wrong one. Detected by cross-referencing every
+build-less service's `image:` against every build-having service's own
+declared `image:` tag *before* deciding to pull anything — a match means
+"shares that service's build", not "pull me". These entries carry
+`shares_build_of` instead of `built`/an archive of their own;
+`construct_release.py`'s compose rewrite resolves their `image:` to
+whatever tag the sibling actually got, the same way it already resolves
+built services' tags.
+
+Known limitation, not hit by any real acceptance app today: a service
+declaring a bare, tagless image reference (e.g. `image: nginx`, implying
+`:latest`) will be pulled and exported correctly, but RC-OFF-002's own
+comparison (`repository:tag` reconstructed from the manifest vs. the
+literal Compose string) won't match `"nginx"` against `"nginx:latest"`.
+Every real image reference seen so far carries an explicit tag.
 
 Compose validation is not reimplemented — `inspect_docker()` (P2) already
 raises `MalformedComposeError` for a structurally broken Compose file,
@@ -44,7 +70,7 @@ import docker
 from docker.errors import DockerException
 
 from rah_packager.docker_inspection import inspect_docker
-from rah_packager.errors import DockerBuildFailedError, DockerImageExportError
+from rah_packager.errors import DockerBuildFailedError, DockerImageExportError, DockerPullFailedError
 
 _BUILD_LOG_TAIL_LINES = 20
 
@@ -55,6 +81,20 @@ def _repository_name(application_slug: str, service_name: str) -> str:
 
 def _archive_filename(repository: str, tag: str) -> str:
     return f"{repository}_{tag}.tar"
+
+
+def _sanitize_archive_stem(image_ref: str) -> str:
+    return image_ref.replace("/", "_").replace(":", "_")
+
+
+def _split_repository_tag(image_ref: str) -> tuple[str, str]:
+    # The tag is the part after the *last* colon, unless that part
+    # contains a `/` — which means the colon was actually a registry
+    # host's `:port` (e.g. `myregistry:5000/image`, no tag at all).
+    repository, sep, tag = image_ref.rpartition(":")
+    if not sep or "/" in tag:
+        return image_ref, "latest"
+    return repository, tag
 
 
 def _extract_log_lines(build_log_stream) -> list[str]:
@@ -88,6 +128,13 @@ def _build_one_image(client, repo_path: Path, service: dict, repository: str, ta
     return image, _extract_log_lines(build_log_stream)
 
 
+def _pull_one_image(client, image_ref: str, service_name: str):
+    try:
+        return client.images.pull(image_ref)
+    except DockerException as exc:
+        raise DockerPullFailedError(service_name, image_ref, str(exc)) from exc
+
+
 def _export_one_image(image, service_name: str, archive_path: Path) -> None:
     try:
         archive_path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,17 +157,55 @@ def build_release_images(
     inspection = inspect_docker(repo_path)  # raises MalformedComposeError if broken
     client = docker.from_env()
 
+    # Built-and-tagged services' own declared image: values, so a
+    # build-less service referencing the same tag is recognized as
+    # sharing that build rather than something to pull.
+    built_image_tags = {
+        service["image"]: service["name"]
+        for service in inspection["services"]
+        if service["build"] is not None and service["image"]
+    }
+
     images = []
     for service in inspection["services"]:
         if service["build"] is None:
+            image_ref = service["image"]
+
+            shares_build_of = built_image_tags.get(image_ref)
+            if shares_build_of is not None:
+                images.append(
+                    {
+                        "service": service["name"],
+                        "built": False,
+                        "exported": False,
+                        "shares_build_of": shares_build_of,
+                        "image": None,
+                        "repository": None,
+                        "tag": None,
+                        "archive": None,
+                        "build_log": None,
+                    }
+                )
+                continue
+
+            repository, tag = _split_repository_tag(image_ref)
+            image = _pull_one_image(client, image_ref, service["name"])
+
+            archive_filename = _sanitize_archive_stem(image_ref) + ".tar"
+            archive_relative = (Path("docker-images") / archive_filename).as_posix()
+            _export_one_image(image, service["name"], output_path / "docker-images" / archive_filename)
+
             images.append(
                 {
                     "service": service["name"],
                     "built": False,
-                    "image": service["image"],
-                    "repository": None,
-                    "tag": None,
-                    "archive": None,
+                    "exported": True,
+                    "image": image_ref,
+                    "repository": repository,
+                    "tag": tag,
+                    "image_id": image.id,
+                    "size_bytes": image.attrs.get("Size"),
+                    "archive": archive_relative,
                     "build_log": None,
                 }
             )
@@ -137,6 +222,7 @@ def build_release_images(
             {
                 "service": service["name"],
                 "built": True,
+                "exported": True,
                 "image": f"{repository}:{version}",
                 "repository": repository,
                 "tag": version,

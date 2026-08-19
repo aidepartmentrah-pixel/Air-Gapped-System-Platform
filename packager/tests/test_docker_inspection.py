@@ -29,7 +29,7 @@ def test_multi_service_compose_parsed_correctly():
     # shorthand `build: ./frontend` (a plain string, not a mapping)
     assert services["frontend"]["build"] == {"context": "./frontend", "dockerfile": None}
 
-    assert services["database"]["image"] == "postgres:16"
+    assert services["database"]["image"] == "alpine:3.19"
     assert services["database"]["build"] is None
 
 

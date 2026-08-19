@@ -2,24 +2,93 @@
 
 ## Current Phase
 
-Period A, Packager track. Release Contract V1 is **FROZEN** (user-confirmed).
-Packager `P0`–`P7` are automated-portion-done — `P7` (Validation,
-Finalization and Independent Offline Proof) finished `rah package`/
-`rah validate` (56 RC-* rules, checksums, Compliance Report, atomic
-finalization), built, tested, and live-proven against the real built
-container and real HCopilot. **The Real Manual Acceptance Test has now
-been executed** (2026-08-11, real Indicator app, real lab hardware) and
-**FAILED at Phase 1**: `rah package` correctly rejected the candidate at
-`RC-SCR-005` — Indicator's own lifecycle scripts are committed to Git
-without the executable bit, a real gap in the Indicator repo, not the
-Packager. Phases 2–6 (offline transfer/install/verify/restart) were never
-reached. Full results:
+Period A has two independent tracks. Release Contract V1 remains
+**FROZEN** (user-confirmed).
+
+Packager `P0`–`P7` are automated-portion-done. **The Real Manual
+Acceptance Test has been executed** (2026-08-11, real Indicator app, real
+lab hardware) and **FAILED at Phase 1**: `rah package` correctly rejected
+the candidate at `RC-SCR-005` — Indicator's own lifecycle scripts were
+committed to Git without the executable bit, a real gap in the Indicator
+repo, not the Packager. Full results:
 `docs/development/Period A — Independent Product Development;
-Packager/3. Real Manual Acceptance Test — Results.md`. **Remaining**: fix
-and re-commit the Indicator repo's script permissions, then re-run
-`rah package` — the `or-stt`/Legion/offline-VM environment is already
-primed for an immediate re-run (nothing else in the pipeline needs
-redoing).
+Packager/3. Real Manual Acceptance Test — Results.md`.
+
+**`RC-SCR-005` is now fixed** (18/08/2026, on this Windows engineering
+workstation, committed and pushed to Indicator's `master`) — see "Open
+Items" below for this and four other real fixes done the same day.
+**Phases 2–6 (Transfer → independent re-validate → Install → Verify →
+Restart) are the real next step**, not blocked on anything structural
+anymore, though the newest Packager-side code (see Open Items) still
+needs to be committed and pushed before a from-scratch re-run elsewhere
+would see it.
+
+Platform track: `PL0` through `PL9a` done and tested (see "Period A —
+Platform" below for the real, slice-by-slice detail). `PL9b` (Offline VM
+Acceptance) is the one remaining piece before Platform's Period A plan
+closes — not yet started as of the last verified record.
+
+## Open Items (status as of 18/08/2026, verified directly — not relayed)
+
+**Packager fixes, done the same day, not yet pushed:**
+
+- **`RC-SCR-005`** — fixed. Not a filesystem permission issue but a git
+  *index mode* issue (git's own tracked executable-bit flag for a file,
+  independent of the real filesystem permission) — corrected for all 10
+  of Indicator's scripts, **committed and pushed** to Indicator's own
+  repo. While at it, the same underlying issue was found and fixed
+  proactively in **Voice Project (29 scripts)** and **HCAT (11 scripts)**
+  too — HCopilot and STT-SCHEDULE already had it right.
+- **`RC-OFF-002` sibling-image gap** (HCopilot's `db-init` service
+  reusing `backend`'s image instead of building or pulling its own) —
+  fixed. A service with no `build:` key isn't always an external
+  prebuilt image; it can be reusing a sibling service's build output.
+  Detected by cross-referencing image tags before deciding to pull;
+  wired into the compose-rewrite step; tests added and passing; verified
+  with a real rebuild against HCopilot.
+- **Model-artifacts feature** — built and confirmed working against real
+  HCopilot: computes a `checksum` and resolves `baked_into_image` for a
+  declared model artifact, replacing the previous unconditional "not
+  supported" rejection. Required a real, scoped extension to
+  `engineering-answers.json`'s schema (`source_path`, `service` per
+  artifact) — not a change to the frozen Release Contract itself.
+  Building this surfaced and fixed two more real, previously-unknown
+  bugs:
+  - A placeholder-detection gap — `__GENERATE_ME__` wasn't recognized as
+    a placeholder value, only `change`/`your`/`todo`/`sample`/etc.-style
+    markers were.
+  - A staleness-loop bug — the Packager's own `--output` directory,
+    conventionally nested inside the project being packaged, wasn't
+    excluded from the project's own inspection walk, so its own
+    generated output was silently changing the very fingerprint used to
+    detect staleness.
+- **STT-SCHEDULE / Voice Project / HCAT model-baking fixes** — done,
+  committed. All three apps now bake their model into the image at build
+  time instead of bind-mounting it at runtime, matching the platform
+  rule below. **Pushed**: STT-SCHEDULE (`offline-deployment` branch,
+  not yet merged to `master`) and Indicator (`master`, no separate
+  branch needed — no database/model at all). **Not yet merged to
+  `main`**: Voice Project and HCAT, both on an unmerged
+  `bake-whisper-model` branch (13 and 1 commits ahead, respectively) —
+  deliberately held per the agreed branching policy (merge only once a
+  real `rah package` end-to-end pass confirms the fix), see the
+  `ticklish-marinating-unicorn` plan file.
+- **The "everything must be inside the image by build time" rule** —
+  confirmed merged into the real, canonical `6. RAH Application
+  Engineering Playbook.md` in the Obsidian vault (verified directly:
+  present as new §11a in the long-form Dockerization prompt and §7a in
+  the compressed form). **This repo's own mirrored copy at
+  `docs/rah-lab-standards/6. RAH Application Engineering Playbook.md`
+  has NOT been updated to match** — confirmed absent there too. Needs a
+  follow-up sync pass, copying the real merged text over rather than
+  reconstructing it.
+
+**Sync gap — not a code problem:** all five Packager fixes above exist
+only on this Windows checkout right now (except where explicitly noted
+pushed above). `git fetch` confirms nothing new has arrived from
+elsewhere for the Packager side. Needs a commit + push here before this
+checkout's own history (and any other checkout, e.g. `or-stt`) reflects
+any of it.
 
 ## Architecture
 
@@ -533,29 +602,30 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-On the Packager Exit Gate: not scoping anymore (that happened and the
-test ran) — blocked on a fix in the **Indicator application repo**
-(`C:\Users\it\Documents\GitHub\Healthcare_reporting_system_backup` on the
-Legion), not this repo: `chmod +x` its five `release/scripts/*.sh`
-lifecycle entrypoints and re-commit, then re-run `rah package` on
-`or-stt`. Everything else needed for the re-run (Legion/offline-VM
-reachability, the cloned Indicator checkout, valid engineering answers)
-is already in place — see
+The Indicator-repo fix that blocked this is done (see "Open Items"
+above). **Current actual blocker: nothing structural** — just sequencing.
+In order: (1) commit and push the newest Packager code (model-artifacts
+feature, `RC-OFF-002` sibling-image fix, the two bonus bug fixes) so it
+exists anywhere other than this one machine; (2) decide on the two
+unmerged `bake-whisper-model` branches (Voice Project, HCAT) plus
+STT-SCHEDULE's unmerged `offline-deployment` branch; (3) re-run the Real
+Manual Acceptance Test from Phase 1 with Indicator's real fix in place,
+continue into Phases 2–6 if Phase 1 passes. See the short task list in
 `docs/development/Period A — Independent Product Development;
-Packager/3. Real Manual Acceptance Test — Results.md`.
+Packager/2. Initial Slicing Task Table.md` for the concrete sequence.
 
 ## Next Major Gate
 
-The Real Manual Acceptance Test, Phases 2–6: transfer a real finalized
-Indicator Release to `Offline-AirGapped-Simulator`, `rah validate` it
-independently, run its own `install_offline.sh`, manually verify the
-application starts, restart-check — the last piece of the Period A
-Packager Exit Gate ("a real application can be initialized, inspected,
-assisted through Claude, planned, built, packaged, validated, finalized,
-manually installed offline, and a second Release can be produced without
-corrupting version history"). Phase 1 (Packaging) was attempted
-2026-08-11 and failed on a source-repo defect, not a Packager defect —
-see above.
+The Real Manual Acceptance Test, Phases 1–6, re-run from the top now that
+`RC-SCR-005` is fixed: package Indicator for real, transfer the finalized
+Release to `Offline-AirGapped-Simulator`, `rah validate` it independently,
+run its own `install_offline.sh`, manually verify the application starts,
+restart-check — the last piece of the Period A Packager Exit Gate ("a
+real application can be initialized, inspected, assisted through Claude,
+planned, built, packaged, validated, finalized, manually installed
+offline, and a second Release can be produced without corrupting version
+history"). The first attempt (2026-08-11) failed at Phase 1 on a
+source-repo defect, not a Packager defect, now fixed — see above.
 
 ## Future Design Tasks (not yet started)
 
