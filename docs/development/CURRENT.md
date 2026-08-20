@@ -211,10 +211,15 @@ exact correct tags — `Loaded image: rah-hcopilot-backend:1.0.2`,
 — confirmed again via `docker images`. The fix holds for HCopilot across
 both code paths (built images and the pulled/prebuilt base image).
 
-**P9 (Full Fleet Validation) started, 20/08/2026.** Real fleet retest
-against all 5 apps, results tracked in the Slicing Task Table. So far:
-HCopilot PASS, Indicator PASS (full Phases 1-6), STT-SCHEDULE PASS,
-Voice Project PASS — HCAT still to do. STT-SCHEDULE and Voice Project
+**P9 (Full Fleet Validation) DONE — all 5 real apps PASS, confirmed
+20/08/2026.** This is the real evidence for the Period A Packager Exit
+Gate: five structurally different real hospital applications (no
+database, SQL Server, Postgres, single-repo, cross-repo, single-model,
+six-model) all independently packaged into Contract-compliant Releases
+by the same unmodified Packager code, zero per-app branching. Full
+results tracked in the Slicing Task Table. HCopilot PASS, Indicator PASS
+(full Phases 1-6), STT-SCHEDULE PASS, Voice Project PASS, HCAT PASS.
+STT-SCHEDULE and Voice Project
 each surfaced one more bad Claude-generated answer (same root-cause
 family as HCopilot's original migration-entrypoint finding) plus one
 more real, generic Packager bug each: `rc_cfg_002`'s placeholder
@@ -226,20 +231,26 @@ detector didn't distinguish a bare Docker Compose service name (e.g.
 least one dot to ever resolve on the public internet — found via Voice
 Project's real internal `WHISPER_SERVICE_URL`). 190/190 tests pass.
 
-**HCAT (4th of 5) — real partial progress, blocked on an Anthropic API
-usage limit** (resets 2026-09-01 00:00 UTC, not a credit-balance issue —
-topping up didn't help). Further than HCAT's "deferred, multi-model
-complexity" reputation suggested: `rah inspect` handled the real,
-hundred-plus-file repo cleanly, and `rah prepare-answers` correctly
-discovered and pathed all 6 real declared model artifacts on the first
-try. Two more real bugs found and fixed: a genuine `RC-SCR-005`
-regression in HCAT's actual repo (14 scripts in a *newer* release folder
-committed non-executable — the earlier documented fix was real but for
-an older, superseded folder — fixed for real, committed locally, not yet
-pushed), and one more placeholder-marker gap (`__SET_ME__`, same family
-as `__GENERATE_ME__`, fixed generically). 191/191 tests pass. `rah
-package`'s own PASS/FAIL not yet confirmed — needs the API limit to
-reset first. Full detail in the Slicing Task Table's P9 section.
+**HCAT (5th of 5) — PASS, confirmed for real**, after a genuine
+multi-hour block on an Anthropic API usage limit resolved mid-session.
+Further than HCAT's "deferred, multi-model complexity" reputation
+suggested: `rah inspect` handled the real, hundred-plus-file repo
+cleanly, and `rah prepare-answers` correctly discovered and pathed all 6
+real declared model artifacts on the first try. Two more real bugs found
+and fixed: a genuine `RC-SCR-005` regression in HCAT's actual repo (14
+scripts in a *newer* release folder committed non-executable — the
+earlier documented fix was real but for an older, superseded folder —
+fixed for real, committed and pushed to HCAT's own `bake-whisper-model`
+branch), and one more placeholder-marker gap (`__SET_ME__`, same family
+as `__GENERATE_ME__`, fixed generically). 191/191 tests pass. Final
+result: `rah package` → `overall_result: PASS`, real finalized
+`HCAT_Release_1.0.0` — `sqlserver` (pulled), `db-init`, `backend` (1.37
+GB, 6 baked ML models — the largest archive across all 5 apps this
+session), and `frontend` (built via a genuine cross-repo relative
+Compose context, `../Front_End_Feedback_Analysis`, both repos cloned as
+siblings for the test). All 4 images re-verified against the image-tag
+export bug via force-remove + reload. Full detail in the Slicing Task
+Table's P9 section.
 
 **P7's Real Manual Acceptance Test, Phases 2–6 against Indicator — ALL
 PASSED for real, 20/08/2026.** The first full end-to-end pass this test
