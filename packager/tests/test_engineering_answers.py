@@ -148,3 +148,25 @@ def test_fingerprint_is_a_sha256_hex_digest():
 
     assert len(fingerprint) == 64
     assert all(c in "0123456789abcdef" for c in fingerprint)
+
+
+def test_fingerprint_ignores_packager_state_changes():
+    """A successful `rah package` run mutates `.rah/project-state.json`
+    (new `release_history` entry), which flows into the next inspection's
+    `packager_state` category. That must not itself count as staleness —
+    otherwise every successful Release would invalidate its own
+    just-used engineering answers for the very next run.
+    """
+    before = {
+        "git": {"commit": "abc"},
+        "packager_state": None,
+    }
+    after = {
+        "git": {"commit": "abc"},
+        "packager_state": {
+            "current_release": "1.0.0",
+            "release_history": [{"version": "1.0.0"}],
+        },
+    }
+
+    assert compute_inspection_fingerprint(before) == compute_inspection_fingerprint(after)

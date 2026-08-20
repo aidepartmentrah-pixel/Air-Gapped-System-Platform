@@ -17,11 +17,39 @@ Packager/3. Real Manual Acceptance Test — Results.md`.
 **`RC-SCR-005` is now fixed** (18/08/2026, on this Windows engineering
 workstation, committed and pushed to Indicator's `master`) — see "Open
 Items" below for this and four other real fixes done the same day.
+
+**Phase 1 re-run, confirmed for real, 19/08/2026**: `rah package` against
+a fresh disposable clone of Indicator (`master`, `RC-SCR-005` fix in
+place) → `overall_result: PASS`, real finalized `Indicator_Release_1.0.0`
+(46 rules PASS, 6 correctly `NOT_APPLICABLE` — no database, matching
+Indicator's own shape — 0 FAIL), both images built and archived. This is
+the first time Phase 1 has ever passed for Indicator. Two things were
+needed to get there, both real and worth carrying forward:
+- Bind-mounting Indicator's live Windows working directory directly hit
+  the CRLF/git-dirty gap from the original P7 proof (`core.autocrlf=true`
+  set only in the host's *global* gitconfig, invisible to the container,
+  so nearly the entire tree read as "modified" from inside it). Worked
+  around the same way as before: a disposable clone, then
+  `git config core.autocrlf input && git checkout -- .` from inside the
+  container.
+- A real gap in Claude's freshly generated engineering answers:
+  `configuration.inputs` was populated but `configuration.template` was
+  left out entirely, even though P2's own inspection had already found a
+  matching candidate (`release/compose/.env.offline.template`, whose 5
+  keys line up exactly with the 5 declared inputs) — `rah package`
+  correctly refused with `PKG-MANIFEST-INCOMPLETE` rather than silently
+  proceeding. Corrected by hand once identified.
+
 **Phases 2–6 (Transfer → independent re-validate → Install → Verify →
-Restart) are the real next step**, not blocked on anything structural
-anymore, though the newest Packager-side code (see Open Items) still
-needs to be committed and pushed before a from-scratch re-run elsewhere
-would see it.
+Restart) are the real next step** — genuinely unattempted in every prior
+run. They need real lab hardware this session does not have credentials
+for (SSH access to `or-stt`, a Hyper-V snapshot revert of
+`Offline-AirGapped-Simulator`) — per
+`docs/development/real-manual-acceptance-test-procedure.md`'s own
+instruction, these should come from the user directly rather than be
+guessed at. The newest Packager-side code (see Open Items) still needs to
+be committed and pushed before a from-scratch re-run elsewhere would see
+it.
 
 Platform track: `PL0` through `PL9a` done and tested (see "Period A —
 Platform" below for the real, slice-by-slice detail). `PL9b` (Offline VM
@@ -89,6 +117,45 @@ pushed above). `git fetch` confirms nothing new has arrived from
 elsewhere for the Packager side. Needs a commit + push here before this
 checkout's own history (and any other checkout, e.g. `or-stt`) reflects
 any of it.
+
+**P8's final clean pass against real HCopilot — confirmed for real,
+19/08/2026.** Docker Desktop was hung on this machine at session start
+(CLI unresponsive, stale `docker` processes going back hours despite the
+WSL2 `docker-desktop` distro reporting "Running") — fixed with a full
+Docker Desktop quit + `wsl --shutdown` + relaunch, confirmed via a real
+`docker version` round trip before proceeding. Getting to the actual
+clean pass then surfaced **two more real, previously-unknown bugs**,
+both fixed at root cause:
+- **A staleness self-invalidation loop**, distinct from the already-
+  documented `--output`-directory bug above. `compute_inspection_fingerprint()`
+  hashed the *entire* `ProjectInspectionResult`, including the
+  `packager_state` category — which every successful `rah package` run
+  itself mutates (`project-state.json` gains a new `release_history`
+  entry). So a successful Release permanently invalidated its own
+  just-used engineering answers for the very next run, even with zero
+  real engineering change. Fixed in `engineering_answers.py` to exclude
+  `packager_state` from the hash; regression test added; 184/184 tests
+  pass.
+- **A bad Claude-generated engineering answer**, caught by
+  `validate-answers`' cross-consistency check, then by `RC-DB-002` itself
+  after a first correction attempt undershot: `database.migration.entrypoint
+  = "backend/alembic"` didn't match any script P2 actually discovered.
+  Investigated the real `update_offline.sh` directly rather than
+  guessing — HCopilot's Alembic migrations run automatically inside
+  `db-init`'s own container command during `docker compose up
+  --force-recreate`, with no separate invocable entrypoint at all.
+  Corrected `database.migration.required_for_update` to `false` (the
+  honest answer: no distinct entrypoint is required because none exists,
+  not a workaround).
+
+Final result: `rah package` → `overall_result: PASS`, real finalized
+`HCopilot_Release_1.0.1`, all 3 declared images archived (backend,
+frontend, **and** the `sqlserver` prebuilt base image — `RC-OFF-002`
+passes for HCopilot now, unlike the documented P7 HCopilot proof where
+it correctly failed), checksums and Compliance Report both written. P8
+is now DONE, not just built — this is the first real confirmed clean
+pass, live-proven, not assumed. The fingerprint-loop fix is real, tested
+code not yet committed.
 
 ## Architecture
 

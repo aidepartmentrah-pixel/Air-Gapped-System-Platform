@@ -369,8 +369,17 @@ ENGINEERING_ANSWERS_SCHEMA: dict = {
 def compute_inspection_fingerprint(inspection_result: dict) -> str:
     """sha256 of the canonicalized `ProjectInspectionResult` — deterministic
     regardless of key order, since `sort_keys=True` normalizes it.
+
+    Excludes the `packager_state` category: it reflects the project's own
+    release history, which a *successful* `rah package` run itself mutates
+    (a new `release_history` entry). Hashing it would make every Release
+    invalidate its own just-used engineering answers for the very next run,
+    even when nothing an engineer actually judged (Docker/database/config)
+    changed. `git_commit` plus every other inspection category still catch
+    every real drift `based_on` is meant to catch.
     """
-    canonical = json.dumps(inspection_result, sort_keys=True, separators=(",", ":"))
+    relevant = {k: v for k, v in inspection_result.items() if k != "packager_state"}
+    canonical = json.dumps(relevant, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

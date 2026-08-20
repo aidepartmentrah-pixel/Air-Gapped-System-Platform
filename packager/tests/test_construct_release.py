@@ -162,6 +162,42 @@ def test_construct_release_produces_valid_candidate(tmp_path):
         _remove_image()
 
 
+# --- Real lifecycle scripts source sibling helpers no single field names ---
+
+
+def test_construct_release_copies_sibling_scripts(tmp_path):
+    """Found live against Indicator's real install_offline.sh: it sources a
+    shared `_common.sh` that no manifest field ever names. Only copying the
+    individually declared entrypoint files left it missing at real install
+    time, even though every RC-SCR-* static check (syntax, executable bit)
+    had already passed. The fix copies every file in the entrypoint's own
+    source directory, not just the one named file — this test locks that in
+    for both destinations that draw from the same source directory
+    (`scripts/` and `verification/`, since `deployment.entrypoints.verify`
+    and `verification.entrypoint` both point at the same source script).
+    """
+    project = tmp_path / "project"
+    project.mkdir()
+    _setup_repo(project)
+    (project / "scripts" / "_common.sh").write_text("#!/bin/sh\n# shared helper\n")
+    _git(project, "add", ".")
+    _git(project, "commit", "--quiet", "-m", "add sibling helper script")
+    # Re-stamp answers against the new commit — same as a real
+    # `rah prepare-answers` re-run would after a source change.
+    answers_path = default_answers_path(project)
+    answers_path.write_text(json.dumps(_valid_answers(inspect_project(project))))
+    output_dir = tmp_path / "output"
+
+    try:
+        result = construct_release(project, output_dir)
+        release_dir = Path(result["release_directory"])
+
+        assert (release_dir / "scripts" / "_common.sh").is_file()
+        assert (release_dir / "verification" / "_common.sh").is_file()
+    finally:
+        _remove_image()
+
+
 # --- Reuses rah plan's gates directly (no re-implementation) ---
 
 

@@ -82,6 +82,17 @@ _DATABASE_FIELDS: list[tuple[tuple[str, ...], str]] = [
     (("database", "recovery", "entrypoint"), "scripts"),
 ]
 
+# Destinations whose declared entrypoint is a *script*, not a standalone
+# content file — real lifecycle scripts routinely `source` a shared sibling
+# helper (e.g. `_common.sh`) that no single manifest field ever names, found
+# live against Indicator's real install_offline.sh (RC-SCR-005 passed —
+# the script is syntactically valid and executable — but it still failed at
+# real execution time with "No such file or directory" on the sourced
+# helper, since only the individually declared file was ever copied).
+# `documentation`/`configuration` destinations are plain content files that
+# don't source each other, so they stay single-file copies.
+_SIBLING_COPY_SUBDIRS = frozenset({"scripts", "database", "verification"})
+
 _DOCUMENTATION_FIELDS: list[tuple[tuple[str, ...], str]] = [
     (("documentation", "release_notes"), "documentation"),
     (("documentation", "installation"), "documentation"),
@@ -117,16 +128,28 @@ def _copy_resources_and_rewrite_answers(
     if answers["configuration"].get("template"):
         fields.append((("configuration", "template"), "configuration"))
 
+    copied_sibling_dirs: set[tuple[str, Path]] = set()
+
     for field_path, subdir in fields:
         source_relative = _dig(answers, field_path)
         if not source_relative:
             continue
+        source_path = project_path / source_relative
         dest_relative = f"{subdir}/{Path(source_relative).name}"
         dest_path = release_dir / dest_relative
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
-            if not dest_path.exists():
-                shutil.copy2(project_path / source_relative, dest_path)
+            if subdir in _SIBLING_COPY_SUBDIRS:
+                source_dir = source_path.parent
+                dir_key = (subdir, source_dir)
+                if dir_key not in copied_sibling_dirs:
+                    copied_sibling_dirs.add(dir_key)
+                    for sibling in source_dir.iterdir():
+                        sibling_dest = dest_path.parent / sibling.name
+                        if sibling.is_file() and not sibling_dest.exists():
+                            shutil.copy2(sibling, sibling_dest)
+            elif not dest_path.exists():
+                shutil.copy2(source_path, dest_path)
         except OSError as exc:
             raise ReleaseConstructionWriteError(str(exc)) from exc
         _set_nested(release_answers, field_path, dest_relative)
