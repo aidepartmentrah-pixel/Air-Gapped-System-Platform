@@ -224,8 +224,22 @@ STT-SCHEDULE's real port-checking comment); `rc_off_004`'s "public URL"
 detector didn't distinguish a bare Docker Compose service name (e.g.
 `http://whisper`) from a real public domain (fixed: a hostname needs at
 least one dot to ever resolve on the public internet — found via Voice
-Project's real internal `WHISPER_SERVICE_URL`). 190/190 tests pass. Full
-detail in the Slicing Task Table's P9 section.
+Project's real internal `WHISPER_SERVICE_URL`). 190/190 tests pass.
+
+**HCAT (4th of 5) — real partial progress, blocked on an Anthropic API
+usage limit** (resets 2026-09-01 00:00 UTC, not a credit-balance issue —
+topping up didn't help). Further than HCAT's "deferred, multi-model
+complexity" reputation suggested: `rah inspect` handled the real,
+hundred-plus-file repo cleanly, and `rah prepare-answers` correctly
+discovered and pathed all 6 real declared model artifacts on the first
+try. Two more real bugs found and fixed: a genuine `RC-SCR-005`
+regression in HCAT's actual repo (14 scripts in a *newer* release folder
+committed non-executable — the earlier documented fix was real but for
+an older, superseded folder — fixed for real, committed locally, not yet
+pushed), and one more placeholder-marker gap (`__SET_ME__`, same family
+as `__GENERATE_ME__`, fixed generically). 191/191 tests pass. `rah
+package`'s own PASS/FAIL not yet confirmed — needs the API limit to
+reset first. Full detail in the Slicing Task Table's P9 section.
 
 **P7's Real Manual Acceptance Test, Phases 2–6 against Indicator — ALL
 PASSED for real, 20/08/2026.** The first full end-to-end pass this test

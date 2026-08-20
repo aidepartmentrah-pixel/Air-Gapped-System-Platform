@@ -10,6 +10,14 @@ def test_recognizes_generate_me_style_placeholder():
     assert _looks_like_placeholder("GENERATE_ME")
 
 
+def test_recognizes_set_me_style_placeholder():
+    # Real pattern found in HCAT's actual .env.offline.template —
+    # __SET_ME__ is just as unambiguous a placeholder as __GENERATE_ME__,
+    # only the verb differs; wasn't recognized either.
+    assert _looks_like_placeholder("__SET_ME__")
+    assert _looks_like_placeholder("SET_ME")
+
+
 def test_still_recognizes_original_marker_styles():
     assert _looks_like_placeholder("CHANGE_ME")
     assert _looks_like_placeholder("your-password-here")

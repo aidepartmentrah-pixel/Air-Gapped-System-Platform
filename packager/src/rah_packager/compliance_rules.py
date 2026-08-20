@@ -70,8 +70,12 @@ _MINIMUM_CHECKSUM_COVERAGE_DIRS = (
 # secret" only when it does NOT contain any common placeholder-signaling
 # substring, rather than trying to enumerate every exact placeholder
 # string up front.
+# `set[_-]?me` added after a real false positive against HCAT's actual
+# `.env.offline.template`: `__SET_ME__` is just as unambiguous a
+# placeholder convention as `__GENERATE_ME__` (already recognized), only
+# the verb differs.
 _PLACEHOLDER_MARKERS = re.compile(
-    r"change|replace|your[_-]?|todo|sample|example|placeholder|xxx|dummy|generate|<.*>|\$\{",
+    r"change|replace|your[_-]?|todo|sample|example|placeholder|xxx|dummy|generate|set[_-]?me|<.*>|\$\{",
     re.IGNORECASE,
 )
 
