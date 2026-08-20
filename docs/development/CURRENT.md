@@ -40,16 +40,52 @@ needed to get there, both real and worth carrying forward:
   correctly refused with `PKG-MANIFEST-INCOMPLETE` rather than silently
   proceeding. Corrected by hand once identified.
 
-**Phases 2–6 (Transfer → independent re-validate → Install → Verify →
-Restart) are the real next step** — genuinely unattempted in every prior
-run. They need real lab hardware this session does not have credentials
-for (SSH access to `or-stt`, a Hyper-V snapshot revert of
-`Offline-AirGapped-Simulator`) — per
-`docs/development/real-manual-acceptance-test-procedure.md`'s own
-instruction, these should come from the user directly rather than be
-guessed at. The newest Packager-side code (see Open Items) still needs to
-be committed and pushed before a from-scratch re-run elsewhere would see
-it.
+**Phases 2–6 executed for real, 20/08/2026 — ALL PASSED.** This is the
+first time the full Real Manual Acceptance Test has ever passed end to
+end, for any RAH application, through this Packager. Lab access was
+resolved this session: the Legion hosts both `OR-STT` and
+`Offline-AirGapped-Simulator` via Hyper-V (confirmed `Offline-Lab` is a
+**Private** switch, so `OR-STT` is the only possible hop to the offline
+VM — no host-level path exists); a fresh SSH keypair was added to
+`OR-STT` directly via the Hyper-V console (its real login is
+`orstt`/`123`, not `root` — this doc previously never recorded it at
+all); `Offline-AirGapped-Simulator` was reverted to
+`GoldenSnapshot-WithRAHOIP` (not `GoldenSnapshot-WithNetwork`, which is
+now the superseded pre-RAH-OIP baseline) and confirmed genuinely
+air-gapped (`curl` to a public IP failed outright).
+
+- **Phase 2 (Transfer)**: PASS. Release + Packager image copied
+  Legion → `OR-STT` → offline VM over the internal switch only.
+- **Phase 3 (Independent re-validate)**: PASS, zero checksum mismatches,
+  proving the bytes survived the full transfer bit-for-bit with zero
+  network dependency on the validating side — the one proof no automated
+  test suite could ever provide on its own.
+- **Phase 4 (Install)**: PASS, but only after **three real, previously-
+  unknown bugs** were found and fixed live — see "Open Items" below for
+  full detail. Two were genuine Indicator-repo script bugs (scripts
+  written for the old, pre-Packager manual deployment convention, never
+  adapted to the real Contract-generated Release shape); one was a
+  serious Packager bug (`docker_build.py`'s image export silently
+  dropped repository/tag info — `docker-py`'s own docs say the default
+  does this — so a genuinely separate Docker Engine loaded every
+  archive completely untagged, and `docker compose up` fell back to a
+  registry pull that fails offline). The Packager bug affects **every
+  Release ever produced**, not just Indicator's — see below.
+- **Phase 5 (Verify)**: PASS — real `verify_installation.sh`, both
+  containers healthy, backend `/health` returned healthy, frontend
+  HTTP 200.
+- **Phase 6 (Restart check)**: PASS — real `stop_stack.sh` +
+  `start_stack.sh` cycle, both containers came back up healthy
+  unattended, full re-verification passed again.
+
+**Not yet done**: committing the three Packager fixes (currently only on
+this machine, tested, 186/186 passing) and the Indicator script fixes
+(committed locally to Indicator's own repo, not yet pushed) — holding
+for explicit go-ahead per this project's git discipline. Also not yet
+done: re-verifying P8's earlier HCopilot "final clean pass" against this
+same image-tag bug — that proof never did a genuine cross-machine
+`docker load`, so it's likely affected too; P9's fleet retest will
+naturally re-surface this for all 5 apps.
 
 Platform track: `PL0` through `PL9a` done and tested (see "Period A —
 Platform" below for the real, slice-by-slice detail). `PL9b` (Offline VM
@@ -156,6 +192,74 @@ it correctly failed), checksums and Compliance Report both written. P8
 is now DONE, not just built — this is the first real confirmed clean
 pass, live-proven, not assumed. The fingerprint-loop fix is real, tested
 code not yet committed.
+
+**P7's Real Manual Acceptance Test, Phases 2–6 against Indicator — ALL
+PASSED for real, 20/08/2026.** The first full end-to-end pass this test
+has ever achieved. Getting through Phase 4 (Install) surfaced three real,
+previously-unknown bugs, each found by genuine execution failure, not
+inspection — fixed at root cause, not worked around:
+
+- **Packager bug, serious, affects every Release ever produced**:
+  `docker_build.py`'s `_export_one_image()` called `image.save()` with no
+  arguments. `docker-py`'s own docstring says plainly: the default
+  (`named=False`) "will not retain repository and tag information for
+  this image." Every prior live-proof only ever reloaded an export back
+  into the *same* Docker Desktop installation that built it, which never
+  surfaced this. A genuinely separate Docker Engine (the offline VM)
+  loaded every archive as completely untagged, so `docker compose up`
+  couldn't find the image locally and fell back to a registry pull —
+  which fails offline, the exact failure mode the whole Contract exists
+  to prevent. This also retroactively explains an already-documented but
+  only partially-understood P7 finding (RC-ART-008's "OCI-format
+  archive, `RepoTags: null`" observation) — that was already evidence of
+  this exact bug, not a separate cosmetic format quirk. First fix attempt
+  (`named=True`) was itself insufficient: it picks `image.tags[0]`, and a
+  content-addressed image ID accumulates every tag it was ever
+  built/pulled with across repeated runs (nothing untags the previous
+  version automatically) — a second real bug, found immediately after
+  the first fix, when a stale prior version's tag got embedded instead of
+  the current Release's. Final fix: pass the exact, already-known tag
+  reference explicitly (`image.save(named=image_ref)`) rather than
+  relying on list order. Two new regression tests strengthen the existing
+  same-installation round-trip tests (which never asserted `.tags` at
+  all — the actual gap that let this ship undetected) plus one new test
+  that reproduces the multi-tag scenario directly. 186/186 tests pass.
+  **This means every Release the Packager has ever produced, including
+  P8's HCopilot proof above, likely has this same bug baked in** — never
+  caught because no prior proof ever did a genuine cross-machine
+  `docker load`. Not yet re-verified for HCopilot; P9's fleet retest
+  will naturally re-surface it.
+- **Packager bug, generic**: `construct_release.py` copied only the
+  individually-declared entrypoint file for each `deployment.entrypoints`
+  field, never any sibling files it might `source`. Indicator's real
+  `install_offline.sh` sources a shared `_common.sh` helper that no
+  manifest field ever names — `RC-SCR-005` passed (the script is
+  syntactically valid and executable) but real execution failed with "No
+  such file or directory" the moment it tried to source its own helper.
+  Fixed by copying every file in a script-like entrypoint's own source
+  directory (not just the one named file) into whichever Release
+  subdirectory(s) draw from it, deduplicated per (subdir, source
+  directory) pair — confirmed correct for the case where the same source
+  script is copied to two different destinations (`deployment.entrypoints.verify`
+  and `verification.entrypoint` both point at the same file). One new
+  regression test.
+- **Two real Indicator-repo script bugs**, not Packager bugs — the
+  scripts were written for the old, pre-Packager manual RAH-OIP
+  deployment convention and never adapted to match what `rah package`
+  actually produces: `COMPOSE_FILE` referenced `docker-compose.offline.yml`
+  in 8 places (the Packager always generates `compose/docker-compose.yml`,
+  fixed by the Contract); `load_images.sh` hardcoded `backend.tar`/
+  `frontend.tar` (the Packager names archives
+  `rah-{slug}-{service}_{version}.tar`, version embedded on purpose so
+  Release versions never collide — rewritten to load every `*.tar` under
+  `docker-images/` instead of assuming fixed names); the config template
+  copy referenced `compose/.env.offline.template` instead of the real
+  `configuration/.env.offline.template`. All fixed and committed locally
+  to Indicator's own repo (not yet pushed).
+
+Full Testing Record for all 6 phases:
+`docs/development/Period A — Independent Product Development;
+Packager/3. Real Manual Acceptance Test — Results.md`.
 
 ## Architecture
 
@@ -590,10 +694,17 @@ Status: NOT STARTED
    `P4` (Release Planning, `rah plan`), `P5` (Docker Build and
    Artifact Preparation, `rah build`), `P6` (Release Construction,
    `rah construct`), and `P7`'s automated portion (Validation and
-   Finalization, `rah package`/`rah validate`) all done and tested. The
-   Real Manual Acceptance Test executed 2026-08-11 against real Indicator
-   and real lab hardware, FAILED at Phase 1 on an Indicator-repo defect
-   (non-executable lifecycle scripts), Phases 2–6 not reached. See
+   Finalization, `rah package`/`rah validate`) all done and tested, and
+   `P8` (Model Artifacts & Offline-Completeness Closure) also done. **The
+   Real Manual Acceptance Test passed end-to-end, 2026-08-20** — Attempt 1
+   (2026-08-11) FAILED at Phase 1 on an Indicator-repo defect
+   (non-executable lifecycle scripts), now fixed; Attempt 3 (2026-08-20)
+   passed all six phases for real against real lab hardware (`or-stt`,
+   `Offline-AirGapped-Simulator`), the last piece of the Period A Packager
+   Exit Gate. Three real bugs found and fixed getting there, one serious
+   (a Packager image-export bug affecting every prior Release — see
+   "Open Items"). `P9` (Full Fleet Validation & Period A Close) is next,
+   not yet started. See
    `docs/development/Period A — Independent Product Development;
    Packager/3. Real Manual Acceptance Test — Results.md`. Platform track: slicing
    proposal reviewed and accepted, `PL0` (Runtime, Database & Test
@@ -669,30 +780,36 @@ this paragraph originally asked for.
 
 ## Current Blocking Dependency
 
-The Indicator-repo fix that blocked this is done (see "Open Items"
-above). **Current actual blocker: nothing structural** — just sequencing.
-In order: (1) commit and push the newest Packager code (model-artifacts
-feature, `RC-OFF-002` sibling-image fix, the two bonus bug fixes) so it
-exists anywhere other than this one machine; (2) decide on the two
-unmerged `bake-whisper-model` branches (Voice Project, HCAT) plus
-STT-SCHEDULE's unmerged `offline-deployment` branch; (3) re-run the Real
-Manual Acceptance Test from Phase 1 with Indicator's real fix in place,
-continue into Phases 2–6 if Phase 1 passes. See the short task list in
+**Nothing structural — the Real Manual Acceptance Test is fully PASSED
+for the first time (see above).** What's left is sequencing, not
+discovery: (1) commit and push the Packager fixes from this session
+(fingerprint self-invalidation loop, sibling-script copy gap, the
+image-tag export bug — the last one is serious and affects every prior
+Release) so they exist anywhere other than this machine; (2) push
+Indicator's own script fixes (committed locally, not yet pushed); (3)
+decide on the three unmerged `bake-whisper-model`/`offline-deployment`
+branches (Voice Project, HCAT, STT-SCHEDULE) per the branching policy —
+merge only once `P9` confirms each fix end-to-end; (4) re-verify
+HCopilot's P8 proof against the newly-discovered image-tag bug — it was
+never actually load-tested on a separate Docker Engine; (5) `P9`: retest
+all 5 real apps and record results. See the short task list in
 `docs/development/Period A — Independent Product Development;
 Packager/2. Initial Slicing Task Table.md` for the concrete sequence.
 
 ## Next Major Gate
 
-The Real Manual Acceptance Test, Phases 1–6, re-run from the top now that
-`RC-SCR-005` is fixed: package Indicator for real, transfer the finalized
-Release to `Offline-AirGapped-Simulator`, `rah validate` it independently,
-run its own `install_offline.sh`, manually verify the application starts,
-restart-check — the last piece of the Period A Packager Exit Gate ("a
-real application can be initialized, inspected, assisted through Claude,
-planned, built, packaged, validated, finalized, manually installed
-offline, and a second Release can be produced without corrupting version
-history"). The first attempt (2026-08-11) failed at Phase 1 on a
-source-repo defect, not a Packager defect, now fixed — see above.
+**Achieved, 20/08/2026**: the Real Manual Acceptance Test, Phases 1–6,
+passed end-to-end for the first time — Indicator packaged for real,
+transferred to `Offline-AirGapped-Simulator` over the internal switch,
+independently re-validated with zero checksum mismatches, installed via
+its own `install_offline.sh`, verified healthy, and confirmed to survive
+a real stop/start restart cycle unattended. This is the last piece of the
+Period A Packager Exit Gate ("a real application can be initialized,
+inspected, assisted through Claude, planned, built, packaged, validated,
+finalized, manually installed offline, and a second Release can be
+produced without corrupting version history") — now demonstrated for
+real, not assumed. **Next gate**: `P9` — the same proof across all 5 real
+apps, plus the two documentation gaps already tracked there.
 
 ## Future Design Tasks (not yet started)
 

@@ -135,11 +135,34 @@ def _pull_one_image(client, image_ref: str, service_name: str):
         raise DockerPullFailedError(service_name, image_ref, str(exc)) from exc
 
 
-def _export_one_image(image, service_name: str, archive_path: Path) -> None:
+def _export_one_image(image, service_name: str, archive_path: Path, image_ref: str) -> None:
+    # `named=` is load-bearing, not cosmetic: docker-py's own docs say
+    # plainly that the default (`named=False`) "will not retain repository
+    # and tag information for this image." Found live during the P7 Real
+    # Manual Acceptance Test — every prior live-proof only ever re-loaded an
+    # export back into the *same* Docker Desktop installation that built it,
+    # which never surfaced this; a genuinely separate Docker Engine (the
+    # offline VM) loaded the archive as a completely untagged image, so
+    # `docker compose up` couldn't find it locally and fell back to a
+    # registry pull instead — the exact failure mode offline install exists
+    # to prevent. This also explains a previously-documented, only
+    # partially-understood P7 finding: exported archives observed as
+    # OCI-format with `RepoTags: null` — that was already evidence of this
+    # bug, not a separate, merely cosmetic Docker-format quirk.
+    #
+    # `named=True` alone is not enough: it silently picks `image.tags[0]`,
+    # and a content-addressed image ID accumulates every tag it was ever
+    # built/pulled with in this Docker Engine's history (nothing untags the
+    # previous version automatically) — found live immediately after the
+    # fix above, when `tags[0]` resolved to a stale prior version's tag
+    # instead of the one this Release actually declares. Passing the exact
+    # `image_ref` this call already computed removes the ambiguity: it's
+    # one of the image's real tags (this function is only ever called right
+    # after that exact tag was just built or pulled), never a guess.
     try:
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         with open(archive_path, "wb") as archive_file:
-            for chunk in image.save():
+            for chunk in image.save(named=image_ref):
                 archive_file.write(chunk)
     except OSError as exc:
         raise DockerImageExportError(service_name, str(exc)) from exc
@@ -193,7 +216,7 @@ def build_release_images(
 
             archive_filename = _sanitize_archive_stem(image_ref) + ".tar"
             archive_relative = (Path("docker-images") / archive_filename).as_posix()
-            _export_one_image(image, service["name"], output_path / "docker-images" / archive_filename)
+            _export_one_image(image, service["name"], output_path / "docker-images" / archive_filename, image_ref)
 
             images.append(
                 {
@@ -216,7 +239,9 @@ def build_release_images(
 
         archive_filename = _archive_filename(repository, version)
         archive_relative = (Path("docker-images") / archive_filename).as_posix()
-        _export_one_image(image, service["name"], output_path / "docker-images" / archive_filename)
+        _export_one_image(
+            image, service["name"], output_path / "docker-images" / archive_filename, f"{repository}:{version}"
+        )
 
         images.append(
             {

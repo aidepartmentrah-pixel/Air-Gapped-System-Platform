@@ -29,6 +29,44 @@ def _remove_image(client, repository: str, tag: str) -> None:
         pass
 
 
+# --- Exported tag survives an image ID with prior-version history ---
+
+
+def test_export_uses_the_correct_tag_when_image_has_prior_versions(tmp_path):
+    """Found live during the P7 Real Manual Acceptance Test: re-building the
+    same unchanged Dockerfile content across several Release versions in a
+    row reuses the same content-addressed image ID every time (Docker's own
+    build cache), and nothing untags the previous version automatically —
+    so by the time a later version exports, that image ID already carries
+    multiple historical tags. `image.save(named=True)` picks `tags[0]`
+    (arbitrary, insertion-order-ish), not necessarily the version this
+    Release actually declares. Reproduces that exact sequence: build/export
+    version 0.0.1, then 0.0.2 from identical Dockerfile content (same image
+    ID, two tags now on it), and asserts the 0.0.2 archive still carries
+    its own real tag, not 0.0.1's.
+    """
+    client = docker.from_env()
+    output_dir = tmp_path / "workspace"
+
+    try:
+        build_release_images(FIXTURES / "trivial-one-container", SLUG, "0.0.1", output_dir)
+        result = build_release_images(FIXTURES / "trivial-one-container", SLUG, "0.0.2", output_dir)
+
+        # Same image ID reused by Docker's build cache — the real
+        # precondition this bug needs, not simulated.
+        assert result["images"][0]["image"] == f"rah-{SLUG}-app:0.0.2"
+
+        archive_path = output_dir / result["images"][0]["archive"]
+        client.images.remove(f"rah-{SLUG}-app:0.0.1", force=True)
+        client.images.remove(f"rah-{SLUG}-app:0.0.2", force=True)
+        with open(archive_path, "rb") as archive_file:
+            loaded = client.images.load(archive_file.read())
+        assert loaded[0].tags == [f"rah-{SLUG}-app:0.0.2"]
+    finally:
+        _remove_image(client, f"rah-{SLUG}-app", "0.0.1")
+        _remove_image(client, f"rah-{SLUG}-app", "0.0.2")
+
+
 # --- Trivial one-container application ---
 
 
@@ -69,6 +107,13 @@ def test_trivial_one_container_builds_and_exports(tmp_path):
             loaded = client.images.load(archive_file.read())
         assert len(loaded) == 1
         assert loaded[0].id == result["images"][0]["image_id"]
+        # The tag must survive the round trip, not just the image content —
+        # `docker-py`'s `Image.save()` silently drops repo/tag info unless
+        # called with `named=True` (found live: a genuinely separate Docker
+        # Engine, unlike this same-installation round trip, loaded the
+        # archive as completely untagged, so `docker compose up` couldn't
+        # find it locally and fell back to a registry pull).
+        assert loaded[0].tags == [f"rah-{SLUG}-app:0.0.1"]
     finally:
         _remove_image(client, f"rah-{SLUG}-app", "0.0.1")
 
@@ -119,6 +164,7 @@ def test_simple_frontend_backend_builds_expected_images(tmp_path):
             loaded = client.images.load(archive_file.read())
         assert len(loaded) == 1
         assert loaded[0].id == db_entry["image_id"]
+        assert loaded[0].tags == ["alpine:3.19"]
     finally:
         _remove_image(client, f"rah-{SLUG}-backend", "0.0.1")
         _remove_image(client, f"rah-{SLUG}-frontend", "0.0.1")
