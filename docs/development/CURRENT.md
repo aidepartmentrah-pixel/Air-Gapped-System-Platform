@@ -531,8 +531,33 @@ also genuinely deployable, not just a dev server: a multi-stage
 Dockerfile (`npm run build` → nginx) wired into `docker-compose.yml` as
 a new `frontend` service, live-verified serving the real production
 build and correctly proxying real API calls through the Compose
-network. `PL9b` (Offline VM Acceptance) is next — needs the actual
-Offline Debian VM, scoping with the user pending. See
+network.
+**`PL9b` (Offline VM Acceptance, the second `PL9` sub-slice) is DONE** —
+the plan's own full 23-step Offline Acceptance Scenario run for real on
+the genuinely air-gapped **Offline Validation VM** (`10.10.10.2`, no
+gateway, real Hyper-V lab hardware): fresh install of `1.0.0`, update to
+`1.1.0` with a real mandatory backup, deliberately introduced host
+drift, detection, and controlled recovery — all real, none of it
+simulated. Images built where there's real internet (`or-stt`),
+transferred via `docker save`/`scp`/`docker load` only, matching the
+lab's own offline-transfer standard. Handled a real shared-VM complication
+twice (unrelated, currently-running work from other concurrent teams
+landed on the same VM mid-slice) by stopping and confirming with the
+user before any revert, rather than assuming exclusive access. Found and
+fixed a real, substantive gap live: the plan's own drift-with-no-failed-
+operation scenario exposed that `RECOVER` was permanently unreachable
+unless the *most recent* lifecycle operation had itself failed — fixed
+in `application_query._evaluate_recover()` (now also unlocked by a
+recorded `DRIFT_DETECTED`/`PARTIALLY_RUNNING`/`UNREACHABLE`
+reconciliation) and `recovery.recover_application()` (`failed_operation_id`
+now genuinely optional), 167/167 tests passing, then re-verified live on
+the offline VM a second time after the fix. Confirmed the same backend
+evidence appears through the frontend's own nginx proxy as through the
+direct API, closing `PL9a`'s own equivalence claim against a real,
+`docker load`-transferred image on a physically separate machine. This
+completes the entire Platform track — every item in the proposal's own
+Period-A Platform Exit Gate, including "Entire scenario works in Offline
+Debian VM," is now real, tested, evidence-backed. See
 `docs/development/Period A — Independent Product Development;
 Platform/2. Initial Slicing Task Table.md`.
 
@@ -577,10 +602,12 @@ Status: NOT STARTED
    State and Action Intelligence), `PL5` (Deployment Planning and
    Configuration), `PL6` (Fresh Installation Execution), `PL7`
    (Verification and Host Reconciliation), `PL8a` (Backup and Update),
-   `PL8b` (Recovery), and `PL9a` (Operator UI Integration) done and
-   tested — all of `PL8` is complete and the UI now performs the same
-   operations as the API, `PL9b` (Offline VM Acceptance) next, needs the
-   actual Offline Debian VM, scoping with the user pending — see
+   `PL8b` (Recovery), `PL9a` (Operator UI Integration), and `PL9b`
+   (Offline VM Acceptance) all done and tested — the full 23-step
+   Offline Acceptance Scenario ran for real on the genuinely air-gapped
+   Offline Validation VM, found and fixed a real `RECOVER`-availability
+   gap live. **The entire Platform track (`PL0`–`PL9b`) is complete**,
+   satisfying the Period-A Platform Exit Gate in full — see
    `docs/development/Period A — Independent Product Development;
    Platform/2. Initial Slicing Task Table.md`.
 
