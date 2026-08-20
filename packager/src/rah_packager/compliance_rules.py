@@ -663,8 +663,19 @@ def rc_cfg_002(ctx: RuleContext):
     if not template or not ctx.exists(template):
         return _na("RC-CFG-002", "RC-CFG", "no configuration template declared")
     declared_keys = {i["key"] for i in inputs}
-    text = ctx.path(template).read_text(encoding="utf-8", errors="ignore")
-    referenced = set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", text))
+    # Scan only real `KEY=VALUE` assignment lines, same convention RC-CFG-001
+    # already uses — a comment line is documentation, not a placeholder to
+    # declare. Found live against STT-SCHEDULE's real template: a comment
+    # with an illustrative `for p in ...` shell one-liner (operator guidance
+    # for checking free ports) got matched as an undeclared `$p` placeholder
+    # by the previous whole-file scan, even though it names nothing that
+    # actually needs substituting.
+    referenced: set[str] = set()
+    for line in ctx.path(template).read_text(encoding="utf-8", errors="ignore").splitlines():
+        match = re.match(r"\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.*)$", line)
+        if not match:
+            continue
+        referenced.update(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", match.group(1)))
     undeclared = sorted(referenced - declared_keys)
     if not undeclared:
         return _pass("RC-CFG-002", "RC-CFG", "every template placeholder is declared under configuration.inputs")
@@ -802,7 +813,15 @@ def rc_off_003(ctx: RuleContext):
 
 
 _PUBLIC_URL_PATTERN = re.compile(
-    r"https?://(?!localhost|127\.0\.0\.1|\$\{)[A-Za-z0-9_.-]+"
+    # A bare single-label host (e.g. `whisper`, `backend`, `sqlserver`) can
+    # never resolve on the public internet — DNS requires a real domain
+    # structure (at least one dot). Docker Compose service-to-service URLs
+    # are routinely written exactly this way (found live against Voice
+    # Project's real `WHISPER_SERVICE_URL=http://whisper:5001/...`, an
+    # entirely normal internal reference, not a real offline-readiness
+    # gap) — requiring a dot after the first label is what actually
+    # distinguishes a genuine public hostname from one.
+    r"https?://(?!localhost|127\.0\.0\.1|\$\{)[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+"
 )
 
 

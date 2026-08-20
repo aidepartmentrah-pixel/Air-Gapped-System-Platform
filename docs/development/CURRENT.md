@@ -190,8 +190,42 @@ frontend, **and** the `sqlserver` prebuilt base image — `RC-OFF-002`
 passes for HCopilot now, unlike the documented P7 HCopilot proof where
 it correctly failed), checksums and Compliance Report both written. P8
 is now DONE, not just built — this is the first real confirmed clean
-pass, live-proven, not assumed. The fingerprint-loop fix is real, tested
-code not yet committed.
+pass, live-proven, not assumed.
+
+**Re-verified against P7's image-tag export bug, confirmed clean,
+20/08/2026.** This `HCopilot_Release_1.0.1` proof predated the
+image-tag-export fix found later during P7's Phase 4 — genuinely
+suspect, since that bug affected every Release ever produced. Re-ran
+`rah package` against real HCopilot with the fixed code:
+`overall_result: PASS`, real finalized `HCopilot_Release_1.0.2`. Then a
+real, direct proof rather than trusting the Compliance Report alone:
+force-removed all three images from the local Docker image store
+(`docker rmi -f`, "Untagged" only — the underlying image data for
+`rah-hcopilot-backend`/`frontend` stayed cached under their `1.0.0`/
+`1.0.1` tags from earlier session work, a real instance of the exact
+multi-tag-history scenario the export fix specifically had to handle;
+`mcr.microsoft.com/mssql/server` was fully removed, no other tags left),
+then `docker load`ed all three archives fresh. All three restored their
+exact correct tags — `Loaded image: rah-hcopilot-backend:1.0.2`,
+`rah-hcopilot-frontend:1.0.2`, `mcr.microsoft.com/mssql/server:2022-latest`
+— confirmed again via `docker images`. The fix holds for HCopilot across
+both code paths (built images and the pulled/prebuilt base image).
+
+**P9 (Full Fleet Validation) started, 20/08/2026.** Real fleet retest
+against all 5 apps, results tracked in the Slicing Task Table. So far:
+HCopilot PASS, Indicator PASS (full Phases 1-6), STT-SCHEDULE PASS,
+Voice Project PASS — HCAT still to do. STT-SCHEDULE and Voice Project
+each surfaced one more bad Claude-generated answer (same root-cause
+family as HCopilot's original migration-entrypoint finding) plus one
+more real, generic Packager bug each: `rc_cfg_002`'s placeholder
+detector was scanning comment lines, not just real assignments (fixed
+to mirror `rc_cfg_001`'s already-correct convention — found via
+STT-SCHEDULE's real port-checking comment); `rc_off_004`'s "public URL"
+detector didn't distinguish a bare Docker Compose service name (e.g.
+`http://whisper`) from a real public domain (fixed: a hostname needs at
+least one dot to ever resolve on the public internet — found via Voice
+Project's real internal `WHISPER_SERVICE_URL`). 190/190 tests pass. Full
+detail in the Slicing Task Table's P9 section.
 
 **P7's Real Manual Acceptance Test, Phases 2–6 against Indicator — ALL
 PASSED for real, 20/08/2026.** The first full end-to-end pass this test
