@@ -948,7 +948,13 @@ make Playbook §13a apply to them too), left open for later.
    effects (Postgres's internal DNS name, the frontend's hardcoded proxy
    target, its listen port) all traced and fixed explicitly rather than
    guessed at. Full Platform suite reconfirmed clean afterward: 167
-   passed, 0 failed. Documented in the Playbook as **§18a**.
+   passed, 0 failed. Documented in the Playbook as **§18a**. **Current
+   infrastructure fact worth knowing**: as a result, `platform-backend-1`/
+   `platform-frontend-1` on `or-stt` now run with `network_mode: host`
+   (no more Docker-managed port publishing — `8000`/`8080` are direct host
+   binds), and Postgres is additionally reachable directly at
+   `127.0.0.1:5432` on `or-stt`'s own host (loopback only), not just from
+   inside the Platform container as before.
 4. **Docker Compose project name never pinned to the manifest's declared
    identity** (HCopilot, application-specific again). Once bug #3 was
    fixed, the install script itself succeeded for real — but Platform's
