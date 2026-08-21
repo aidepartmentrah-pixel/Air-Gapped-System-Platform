@@ -2,7 +2,8 @@
 
 **As of 2026-08-21**: Period A (both tracks, Packager and Platform) is
 fully closed — see "Current Mission" step 6 below for the complete exit-
-gate evidence. **Period B has started**: `B0` is DONE, `B1` is next —
+gate evidence. **Period B has started**: `B0`, `B1`, `B2` are DONE, an
+urgent interstitial fix (`B2+`) is also DONE, `B3` (retry) is next —
 see "Period B — Integration" below. The rest of this "Current Phase"
 section is preserved as Period A's own detailed historical record and is
 no longer the live status; skip to "Period B — Integration" for what's
@@ -756,7 +757,7 @@ Platform/2. Initial Slicing Task Table.md`.
 
 ## Period B — Integration
 
-Status: **STARTED — `B0`, `B1`, `B2` DONE** (2026-08-21), `B3` next. Entry Gate met (2026-08-20): `docs/development/Period B — Cross-Product Integration/1. Initial GPT Proposal.md` (lines 43–79) requires both Period A tracks to independently pass their own Minimum Gate before Period B may begin — not "development has progressed far enough," an explicit gate. Both are now real, evidence-backed, not assumed:
+Status: **STARTED — `B0`, `B1`, `B2` DONE, urgent interstitial fix `B2+` DONE** (2026-08-21), `B3` (retry) next. Entry Gate met (2026-08-20): `docs/development/Period B — Cross-Product Integration/1. Initial GPT Proposal.md` (lines 43–79) requires both Period A tracks to independently pass their own Minimum Gate before Period B may begin — not "development has progressed far enough," an explicit gate. Both are now real, evidence-backed, not assumed:
 
 - **Packager Minimum Gate** — met: init, inspect, validate engineering answers, plan, build Docker artifacts, construct, validate against the Contract, finalize, produce a stable Release fingerprint, produce a Release that can be manually installed offline. All demonstrated for real, most recently via the 6-phase Real Manual Acceptance Test against Indicator and the `P9` full-fleet retest (5/5 real apps).
 - **Platform Minimum Gate** — met: scan Golden Releases, import them, represent Applications/Releases correctly, plan installations, install a Golden Release, verify it, update between compatible Golden Releases, preserve backup/history, detect failures and drift, expose operation results via the API. All demonstrated for real via `PL0`–`PL9b`, most recently the real 23-step Offline Acceptance Scenario on the genuinely air-gapped Offline Validation VM.
@@ -850,6 +851,34 @@ that specific directory — consistent with this project's own prior
 decision that the Release fingerprint is deliberately `release.yaml`-only.
 See the Period B task table for the full record. `B3` (Fresh
 Installation) is next.
+
+**`B2+` (urgent, unplanned fix) DONE, 2026-08-21.** Inserted between
+`B2` and `B3` after `B3`'s first real attempt (installing a real,
+re-packaged `HCopilot_Release_1.0.4`) failed with `cp: X and X are the
+same file` inside the real install script. Root cause: Platform's
+`PL6`-era staging copied a Release's entire payload into the live
+canonical deployment path and ran scripts from that copy, collapsing
+the Release's own immutable location (`RELEASE_DIR`) and the permanent
+live deployment directory (`canonical_path`) into the literal same
+directory — real Applications' own scripts (correctly) assume these are
+two different places and copy content between them, which self-
+collides when they're not. Fixed properly, not patched around: lifecycle
+scripts now run in place from `release_storage_path` (matching
+`backup.py`/`recovery.py`'s pre-existing, already-correct convention),
+with the live path passed explicitly via `RAH_ACTIVE_DEPLOYMENT_PATH`;
+15 Golden Fixture scripts and their checksums updated to stop relying on
+Compose's implicit `.env` lookup. **No real Application needed any
+change** — HCopilot's (and every other real app's) own scripts already
+hardcode their live path as `/opt/rah/apps/<slug>`, already matching
+Platform's own `deployments_path` default; only Platform's staging
+shortcut had broken the agreement the two products already shared. Full
+Platform test suite reconfirmed clean on `or-stt` against real
+Postgres/Docker: 167 passed, 0 failed. One test-harness gap found and
+fixed along the way (a test bypassing the real install path had never
+rendered a config file at all, silently tolerated before this fix and
+correctly surfaced by it). See the Period B task table's own `B2+`
+section for the full record. `B3` (retry, now against a Platform whose
+real behavior matches the documented architecture) is next.
 
 ## Period C — Jenkins
 
