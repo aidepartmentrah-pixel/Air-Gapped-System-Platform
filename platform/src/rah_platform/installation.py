@@ -20,13 +20,17 @@ long-running-operation model (§5.3) and the plan's own "Successful
 Install" test wording ("202 Accepted → operation_id → RUNNING → ...").
 
 **Deployment staging**: the canonical path (`deployment.canonical_path`
-from the manifest, e.g. `/opt/rah/apps/<slug>`) is staged *inside the
-Platform backend's own container filesystem* under
-`config.deployments_path`, not a real host-mounted directory — a
-deliberate Period A simplification (see Decisions Made in the Slicing
-Task Table), sufficient to prove the execution mechanics without solving
-host-persistent deployment-directory topology, which is out of this
-slice's scope.
+from the manifest, e.g. `/opt/rah/apps/<slug>`) is a real, permanent
+directory under `config.deployments_path` — genuinely separate from the
+Release's own immutable payload under `config.release_storage_path`.
+Lifecycle scripts always run *in place* from the Release Storage copy
+(the same convention `backup.py`/`recovery.py` already use), never from a
+copy staged inside the canonical path. `prepare_deployment_directory`
+only ensures the canonical path (and its `compose/` subdirectory, where
+configuration is rendered) exists — it does not copy anything into it.
+The canonical path is handed to the script explicitly via the
+`RAH_ACTIVE_DEPLOYMENT_PATH` environment variable (see `run_script`),
+matching real Applications' own declared `deployment.canonical_path`.
 """
 
 from __future__ import annotations
@@ -132,16 +136,16 @@ def install_application(engine, config: Config, *, release_id: str, configuratio
     return operations.get_operation(engine, operation_id)
 
 
-def prepare_deployment_directory(config: Config, release_directory_name: str, slug: str) -> str:
-    source = os.path.join(config.release_storage_path, release_directory_name)
+def prepare_deployment_directory(config: Config, slug: str) -> str:
+    """Ensures the real, permanent canonical deployment path exists (and
+    its `compose/` subdirectory, where `render_configuration` writes
+    `.env`). Does not copy anything from Release Storage — lifecycle
+    scripts run in place from there (see this module's docstring).
+    """
     canonical_path = os.path.join(config.deployments_path, slug)
     if os.path.isdir(canonical_path):
         shutil.rmtree(canonical_path)
-    os.makedirs(canonical_path, exist_ok=True)
-    for sub in ("compose", "scripts", "docker-images", "configuration"):
-        src = os.path.join(source, sub)
-        if os.path.isdir(src):
-            shutil.copytree(src, os.path.join(canonical_path, sub))
+    os.makedirs(os.path.join(canonical_path, "compose"), exist_ok=True)
     return canonical_path
 
 
@@ -261,15 +265,18 @@ def _execute_install(engine, config: Config, operation_id: str, application_id: 
             ).mappings().first()
 
         operations.update_stage(engine, operation_id, "PREPARING")
-        canonical_path = prepare_deployment_directory(config, storage_row["directory_name"], slug)
+        canonical_path = prepare_deployment_directory(config, slug)
         render_configuration(canonical_path, manifest, configuration)
         with engine.begin() as conn:
             operations.log(conn, operation_id, "Deployment directory prepared and configuration rendered.")
 
         operations.update_stage(engine, operation_id, "EXECUTING_SCRIPT")
         entrypoint = manifest["deployment"]["entrypoints"].get("install")
-        # entrypoint is already a full path relative to the Release root (e.g. "scripts/install_offline.sh")
-        script_path = os.path.join(canonical_path, entrypoint) if entrypoint else None
+        # entrypoint is a full path relative to the Release root (e.g. "scripts/install_offline.sh"),
+        # and runs in place from Release Storage — never copied into canonical_path.
+        script_path = (
+            os.path.join(config.release_storage_path, storage_row["directory_name"], entrypoint) if entrypoint else None
+        )
         if not entrypoint or not os.path.isfile(script_path):
             raise InstallationScriptMissingError(
                 "The declared install script does not exist.",
@@ -277,7 +284,11 @@ def _execute_install(engine, config: Config, operation_id: str, application_id: 
                 details={"entrypoint": entrypoint},
             )
 
-        exit_code, stdout, stderr = run_script(script_path, timeout_seconds=config.install_script_timeout_seconds)
+        exit_code, stdout, stderr = run_script(
+            script_path,
+            timeout_seconds=config.install_script_timeout_seconds,
+            extra_env={"RAH_ACTIVE_DEPLOYMENT_PATH": canonical_path},
+        )
         with engine.begin() as conn:
             operations.log(
                 conn,

@@ -253,14 +253,17 @@ def _execute_update(
             storage_row = conn.execute(
                 release_storage.select().where(release_storage.c.release_id == target_release_row["release_id"])
             ).mappings().first()
-        canonical_path = prepare_deployment_directory(config, storage_row["directory_name"], slug)
+        canonical_path = prepare_deployment_directory(config, slug)
         render_configuration(canonical_path, manifest, final_configuration)
         with engine.begin() as conn:
             operations.log(conn, operation_id, "Deployment directory replaced and configuration rendered for the target Release.")
 
         entrypoint = manifest["deployment"]["entrypoints"].get("update")
-        # entrypoint is already a full path relative to the Release root (e.g. "scripts/update_offline.sh")
-        script_path = os.path.join(canonical_path, entrypoint) if entrypoint else None
+        # entrypoint is a full path relative to the Release root (e.g. "scripts/update_offline.sh"),
+        # and runs in place from Release Storage — never copied into canonical_path.
+        script_path = (
+            os.path.join(config.release_storage_path, storage_row["directory_name"], entrypoint) if entrypoint else None
+        )
         if not entrypoint or not os.path.isfile(script_path):
             raise UpdateScriptMissingError(
                 "The declared update script does not exist.",
@@ -268,7 +271,11 @@ def _execute_update(
                 details={"entrypoint": entrypoint},
             )
 
-        exit_code, stdout, stderr = run_script(script_path, timeout_seconds=config.install_script_timeout_seconds)
+        exit_code, stdout, stderr = run_script(
+            script_path,
+            timeout_seconds=config.install_script_timeout_seconds,
+            extra_env={"RAH_ACTIVE_DEPLOYMENT_PATH": canonical_path},
+        )
         with engine.begin() as conn:
             operations.log(
                 conn,
@@ -293,9 +300,12 @@ def _execute_update(
         if migration_decl.get("required_for_update", False):
             operations.update_stage(engine, operation_id, "MIGRATING")
             migration_entrypoint = migration_decl.get("entrypoint")
-            # migration_entrypoint is already a full path relative to the Release root
+            # migration_entrypoint is a full path relative to the Release root, and
+            # runs in place from Release Storage — never copied into canonical_path.
             migration_script_path = (
-                os.path.join(canonical_path, migration_entrypoint) if migration_entrypoint else None
+                os.path.join(config.release_storage_path, storage_row["directory_name"], migration_entrypoint)
+                if migration_entrypoint
+                else None
             )
             if not migration_entrypoint or not os.path.isfile(migration_script_path):
                 raise MigrationFailedError(
@@ -304,7 +314,9 @@ def _execute_update(
                     details={"entrypoint": migration_entrypoint},
                 )
             migration_exit_code, migration_stdout, migration_stderr = run_script(
-                migration_script_path, timeout_seconds=config.install_script_timeout_seconds
+                migration_script_path,
+                timeout_seconds=config.install_script_timeout_seconds,
+                extra_env={"RAH_ACTIVE_DEPLOYMENT_PATH": canonical_path},
             )
             with engine.begin() as conn:
                 operations.append_event(
