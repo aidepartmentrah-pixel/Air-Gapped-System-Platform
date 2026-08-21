@@ -1,4 +1,4 @@
-# Fleet Packaging Status — Internal Reference
+# Packager Readiness — Internal Reference
 
 A working dashboard of where each of the 5 real applications actually
 stands with respect to the shared RAH Packager + Platform pipeline —
