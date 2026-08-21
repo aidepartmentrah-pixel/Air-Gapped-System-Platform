@@ -36,11 +36,6 @@ def _docker_client():
     return docker.from_env()
 
 
-def _run_install_script(config: Config, directory_name: str) -> None:
-    script = Path(config.release_storage_path) / directory_name / "scripts" / "install_offline.sh"
-    subprocess.run([str(script)], check=True, cwd=str(script.parent))
-
-
 def _new_verify_operation(db_engine, application_id: str) -> str:
     operation = operations.create_operation(
         db_engine, operation_type="VERIFY", application_id=application_id, requested_by="operator:test"
@@ -148,7 +143,17 @@ def test_failed_backend_health_check(db_engine, tmp_path, _teardown_compose_proj
     config = _config(tmp_path)
     imported = _import_golden_release(db_engine, config, "backend-health-fails")
     _teardown_compose_projects.append("rah-health-fail-app")
-    _run_install_script(config, "backend-health-fails")
+
+    # Uses the real install path (not a raw subprocess call) so the
+    # container is started exactly as Platform starts it in production —
+    # configuration rendered to canonical_path, RAH_ACTIVE_DEPLOYMENT_PATH
+    # passed to the script. The operation is expected to end FAILED (the
+    # backend never becomes healthy), but the container itself stays up
+    # for this test's own manual verification below.
+    install_result = installation.install_application(
+        db_engine, config, release_id=imported["release_id"], configuration={"APP_PORT": {"value": 8501}}, requested_by="operator:test"
+    )
+    wait_for_terminal_operation(db_engine, install_result["operation_id"])
 
     application_id = imported["application"]["id"]
     result = _run_manual_verification(
