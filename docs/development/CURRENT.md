@@ -880,6 +880,57 @@ correctly surfaced by it). See the Period B task table's own `B2+`
 section for the full record. `B3` (retry, now against a Platform whose
 real behavior matches the documented architecture) is next.
 
+**Two further real, application-specific bugs found and fixed during the
+actual `B3` retry, 2026-08-21** (both in HCopilot's own `release-src`,
+neither a Platform or Packager defect):
+
+1. **Wrong directory for the configuration template.** The RAH Packaging
+   Engine always relocates a declared `configuration.template` file into
+   the built Release's `configuration/` directory, regardless of where it
+   lived in the app's own source tree — confirmed directly against a real
+   packaged `release.yaml` (`configuration.template:
+   configuration/.env.offline.template`). HCopilot's `install_offline.sh`/
+   `update_offline.sh` hardcoded `compose/.env.offline.template` instead —
+   an assumption that only ever coincidentally worked while Platform's
+   now-fixed staging bug made `compose/` and `configuration/` the same
+   directory. Fixed in both scripts (`a31aaaf` in the HCopilot repo). Also
+   added to the Playbook as **§13a**, scoped explicitly to apps that
+   actually use the shared Packager (an app with its own independent
+   release-build pipeline keeps its own valid convention — see the fleet
+   check below).
+2. **`database/*.sql` is never actually packaged.** `install_offline.sh`
+   copies `$RELEASE_DIR/database/*.sql` to `$INSTALL_ROOT/database/`, which
+   `backup_database.sh`/`restore_database.sh` genuinely need — but nothing
+   in `.rah/engineering-answers.json` declares a field that causes the
+   Packaging Engine to include `release-src/database/*.sql` (a separate
+   source directory from the declared `database.initialization.entrypoint`,
+   `backend/scripts/ensure_database_exists.py`) in a built Release. Every
+   real Release's `database/` folder therefore contains only the four
+   Python db-init scripts, never the two `.sql` files. Made the copy
+   non-fatal (`dfe7023`) so this gap doesn't block installation itself,
+   but **backup/restore are genuinely broken until the packaging gap
+   itself is fixed** — needs a real decision (which engineering-answers
+   field should declare `release-src/database/*.sql`, or whether
+   `backup_database.sh`/`restore_database.sh` should instead read them from
+   somewhere Packager already populates) before `B5` (Backup/Update)
+   exercises HCopilot for real. **Not yet fixed — tracked here so it isn't
+   lost.**
+
+**Fleet check performed alongside finding #1** (zero API cost, local
+inspection only): of the 5 real apps, only HCopilot and
+`Healthcare_reporting_system_backup` actually use the shared RAH Packager
+(both have a `.rah/` engineering-answers directory); STT-SCHEDULE,
+RESTful-API-Integration, and HCAT (`Patient_Feedback`) each have their own
+independent, non-Packager release-build scripts, and each app's own script
+already agrees with its own build tooling's convention (self-consistent,
+not bugged). `Healthcare_reporting_system_backup`'s script was already
+correct. Deliberately left unchanged, per explicit user decision — forcing
+the Packager's `configuration/` convention onto them would be a regression,
+not a fix, since nothing in their own pipelines ever places a file there.
+**Worth a deliberate future decision**, not urgent: whether any of these
+three should eventually migrate onto the shared Packager (which would then
+make Playbook §13a apply to them too), left open for later.
+
 ## Period C — Jenkins
 
 Status: NOT STARTED
