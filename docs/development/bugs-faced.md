@@ -208,10 +208,51 @@ only bound via Docker's own port-publishing, not directly on the host, so
 moving to host networking would newly claim those exact host ports
 directly).
 
-**Status:** 🔴 **Not yet fixed.** Real containers from this test
-(`compose-sqlserver-1`, `compose-backend-1`, `compose-frontend-1`,
-`compose-db-init-1`) are still running on `or-stt` right now, healthy, but
-Platform's own Registry has no record of an active deployment (the install
-operation itself reported `FAILED`, since it treats `verify_installation.sh`'s
-exit code as authoritative, correctly per its own design). Needs a decision
-before `B3` can be retried and actually complete successfully.
+**Status:** ✅ Fixed. `platform/docker-compose.yml`: `network_mode: host` on
+both `backend` and `frontend`; Postgres published to the host on loopback
+only (`127.0.0.1:5432:5432`); `RAH_DATABASE_URL` repointed from the
+bridge-network DNS name `postgres` to `localhost` (matching `config.py`'s
+own existing default); `platform/frontend/nginx.conf` repointed from
+`backend:8000` to `localhost:8000` and switched to `listen 8080` directly
+(no more host-port remapping under host networking) (commit `8cb1955`).
+Verified directly: `curl localhost:8000/...` from inside
+`platform-backend-1` now returns `200` (previously `000`). Full Platform
+test suite reconfirmed clean afterward: 167 passed, 0 failed, real
+Postgres/Docker on `or-stt`. Documented in the Playbook as **§18a**.
+
+---
+
+### 7. HCopilot: Docker Compose project name never pinned to the manifest's declared identity
+
+**What broke:** After bug #6 was fixed, install actually succeeded (the
+app's own `install_offline.sh` exited `0`, real containers came up
+healthy) — but Platform's own post-install verification still reported
+`FAILED`: `container_existence: Missing containers for services:
+['sqlserver', 'backend', 'frontend']`, even though those containers were
+genuinely running.
+
+**Root cause:** `start_stack.sh` runs `docker compose up -d` from
+`$INSTALL_COMPOSE_DIR` (`/opt/rah/apps/hcopilot/compose`) without ever
+setting `COMPOSE_PROJECT_NAME` or passing `-p`. Compose's documented
+fallback — the basename of the directory containing the Compose file —
+kicked in, producing project name `compose` (the directory is literally
+named `compose/`), not `hcopilot`. Every real container ended up labeled
+`com.docker.compose.project=compose`. Platform's verification correctly
+filters real containers by the manifest's own declared
+`compose_project_name` (`hcopilot`, per the Release Contract) and
+therefore found zero matches — a real violation of this Playbook's own
+§9 ("Establish a Stable Docker Compose Identity": *"Do not allow Docker
+Compose to derive the production application identity from... another
+staging-directory name"*), not a Platform bug.
+
+**At fault:** HCopilot (application-specific).
+
+**Fix:** `_common.sh` now exports `COMPOSE_PROJECT_NAME="$APP_SLUG"` once,
+sourced by every lifecycle script — no per-script changes needed.
+
+**Status:** ✅ Fixed (HCopilot commit `9aef4db`). Verified for real: fresh
+install of `HCopilot_Release_1.0.7` via Platform `SUCCEEDED` end to end
+(`RECORDING_RESULT`, `verification_status: PASS`), real containers now
+correctly labeled `hcopilot-*`/`com.docker.compose.project=hcopilot`,
+frontend/backend independently confirmed reachable and healthy from
+outside Platform. **`B3` (Fresh Installation) is DONE.**

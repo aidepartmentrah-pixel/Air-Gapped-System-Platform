@@ -3,7 +3,7 @@
 **As of 2026-08-21**: Period A (both tracks, Packager and Platform) is
 fully closed — see "Current Mission" step 6 below for the complete exit-
 gate evidence. **Period B has started**: `B0`, `B1`, `B2` are DONE, an
-urgent interstitial fix (`B2+`) is also DONE, `B3` (retry) is next —
+urgent interstitial fix (`B2+`) is also DONE, and `B3` is now DONE too —
 see "Period B — Integration" below. The rest of this "Current Phase"
 section is preserved as Period A's own detailed historical record and is
 no longer the live status; skip to "Period B — Integration" for what's
@@ -757,7 +757,7 @@ Platform/2. Initial Slicing Task Table.md`.
 
 ## Period B — Integration
 
-Status: **STARTED — `B0`, `B1`, `B2` DONE, urgent interstitial fix `B2+` DONE** (2026-08-21), `B3` (retry) next. Entry Gate met (2026-08-20): `docs/development/Period B — Cross-Product Integration/1. Initial GPT Proposal.md` (lines 43–79) requires both Period A tracks to independently pass their own Minimum Gate before Period B may begin — not "development has progressed far enough," an explicit gate. Both are now real, evidence-backed, not assumed:
+Status: **STARTED — `B0`, `B1`, `B2`, `B2+`, and `B3` all DONE** (2026-08-21), `B4` next. Entry Gate met (2026-08-20): `docs/development/Period B — Cross-Product Integration/1. Initial GPT Proposal.md` (lines 43–79) requires both Period A tracks to independently pass their own Minimum Gate before Period B may begin — not "development has progressed far enough," an explicit gate. Both are now real, evidence-backed, not assumed:
 
 - **Packager Minimum Gate** — met: init, inspect, validate engineering answers, plan, build Docker artifacts, construct, validate against the Contract, finalize, produce a stable Release fingerprint, produce a Release that can be manually installed offline. All demonstrated for real, most recently via the 6-phase Real Manual Acceptance Test against Indicator and the `P9` full-fleet retest (5/5 real apps).
 - **Platform Minimum Gate** — met: scan Golden Releases, import them, represent Applications/Releases correctly, plan installations, install a Golden Release, verify it, update between compatible Golden Releases, preserve backup/history, detect failures and drift, expose operation results via the API. All demonstrated for real via `PL0`–`PL9b`, most recently the real 23-step Offline Acceptance Scenario on the genuinely air-gapped Offline Validation VM.
@@ -930,6 +930,53 @@ not a fix, since nothing in their own pipelines ever places a file there.
 **Worth a deliberate future decision**, not urgent: whether any of these
 three should eventually migrate onto the shared Packager (which would then
 make Playbook §13a apply to them too), left open for later.
+
+**Two more real bugs found and fixed completing `B3`, 2026-08-21:**
+
+3. **Platform's own lifecycle-script subprocess ran inside an isolated
+   Docker network** (Platform bug, not an app bug this time). `verify_installation.sh`
+   reported the backend/frontend/proxy all unreachable — but the real app
+   was completely healthy (confirmed by curling it directly from the real
+   `or-stt` host). Root-caused by proving the negative directly: the exact
+   same `curl localhost:8090/health` returned nothing from inside
+   `platform-backend-1` (the container that actually runs the script) but
+   succeeded from the real host — because that container runs on its own
+   isolated Docker bridge network, not host networking, so `localhost`
+   inside it never meant what every lifecycle script (written to run on
+   the real Debian host) assumes. Fixed by moving Platform's
+   `backend`/`frontend` to `network_mode: host`, with the resulting ripple
+   effects (Postgres's internal DNS name, the frontend's hardcoded proxy
+   target, its listen port) all traced and fixed explicitly rather than
+   guessed at. Full Platform suite reconfirmed clean afterward: 167
+   passed, 0 failed. Documented in the Playbook as **§18a**.
+4. **Docker Compose project name never pinned to the manifest's declared
+   identity** (HCopilot, application-specific again). Once bug #3 was
+   fixed, the install script itself succeeded for real — but Platform's
+   own post-install verification still failed, reporting zero matching
+   containers for a genuinely running app. Root cause: `start_stack.sh`
+   ran `docker compose up -d` from a directory literally named `compose/`
+   without ever setting `COMPOSE_PROJECT_NAME`, so Compose fell back to
+   deriving the project identity from that directory's own basename
+   (`compose`) instead of the manifest's declared `compose_project_name`
+   (`hcopilot`) — a real violation of this project's own Playbook §9
+   ("Establish a Stable Docker Compose Identity"). Fixed by exporting
+   `COMPOSE_PROJECT_NAME` once in `_common.sh`.
+
+**`B3` DONE, 2026-08-21.** Real `HCopilot_Release_1.0.7` (the fourth
+re-package of this session, one per real bug found) installed via
+Platform end to end: `202` → `RUNNING` → `SUCCEEDED`, real containers
+correctly labeled `hcopilot-sqlserver-1`/`hcopilot-backend-1`/
+`hcopilot-frontend-1`, all healthy; Registry's `active_deployment`
+correctly populated with `verification_status: PASS`; backend/frontend
+independently confirmed reachable from outside Platform
+(`curl localhost:8090/health` → `{"status":"ok"}`,
+`curl localhost:8082/` → `200`); `db-init` genuinely imported all real
+historical data (425,022 `HistoricalEdStays` rows, exact CSV-vs-DB parity
+across every lookup/reference table). Four real bugs found and fixed
+getting there (three application-specific, one in Platform itself) — full
+detail in `docs/development/bugs-faced.md`. See the Period B task table's
+own `B3` section for the complete Testing Record. `B4` (Verification/
+Reconciliation) is next.
 
 ## Period C — Jenkins
 
