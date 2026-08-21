@@ -984,6 +984,38 @@ detail in `docs/development/bugs-faced.md`. See the Period B task table's
 own `B3` section for the complete Testing Record. `B4` (Verification/
 Reconciliation) is next.
 
+**`B4` STARTED, 2026-08-21 — in progress, not yet DONE.** Independent
+`MANUAL` re-verification and the full traceability chain (deployment →
+Release ID → fingerprint, matched against the real `release.yaml` on
+disk → Git commit, confirmed present in HCopilot's own repo) both
+confirmed real. Along the way, surfaced and fixed a real, previously
+undiscovered Platform bug, tracked as interstitial slice **`B3+`**
+(same pattern as `B2+`): `config.deployments_path` and
+`config.backups_path` were never bind-mounted from `platform-backend-1`
+to the real `or-stt` host — everything `install_offline.sh` wrote to the
+"permanent" canonical deployment path was trapped in the container's own
+ephemeral filesystem, and would have been silently lost on any container
+recreation, directly threatening `B5`'s secret-preservation and backup
+durability. Fixed: two bind mounts added to `or-stt`'s own untracked
+`docker-compose.override.yml`; trapped files rescued via `docker cp`
+before recreating `platform-backend-1`, then restored into the now
+host-backed path; real `hcopilot-*` containers confirmed untouched
+throughout; `verify`/`reconcile` re-run afterward, both still
+`PASS`/`CONSISTENT`. Full regression suite confirmed clean: **167 passed,
+0 failed, 575.39s**, matching `B3`'s own baseline exactly. `B3+` is
+**DONE**, all seven Testing Record items PASS.
+Also found, real but deliberately not blocking: HCopilot is the first
+real app with `database.required: true`, and Platform's own
+`database_connectivity`/`migration_state` verification checks are still
+unimplemented Period A stubs (documented as anticipated in
+`verification.py`'s own docstring) — proved the real DB state
+independently instead (direct `sqlcmd` against `HCopilotDB`: `Doctors`=18,
+`EDbeds`=24 rows). Full detail in `docs/development/bugs-faced.md`
+(#8–#9) and the Period B task table's own `B3+` section. **Next session:
+finish `B4`'s one remaining piece, the controlled-drift test** (stop a
+real container from outside Platform, confirm `reconcile` reports
+`DRIFT_DETECTED`, restart, confirm it returns to `CONSISTENT`).
+
 ## Period C — Jenkins
 
 Status: NOT STARTED

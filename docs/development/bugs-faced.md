@@ -256,3 +256,108 @@ install of `HCopilot_Release_1.0.7` via Platform `SUCCEEDED` end to end
 correctly labeled `hcopilot-*`/`com.docker.compose.project=hcopilot`,
 frontend/backend independently confirmed reachable and healthy from
 outside Platform. **`B3` (Fresh Installation) is DONE.**
+
+---
+
+## 2026-08-21 — Period B, `B4` (Verification/Reconciliation)
+
+### 8. Platform: canonical deployment path and backups path never bind-mounted to the real host
+
+**What broke:** Nothing visibly — this was found by independently tracing
+real state during `B4`, not by a failure. `install_offline.sh` genuinely
+wrote `.env`, `docker-compose.yml`, `INSTALLED_VERSION`,
+`DEPLOYMENT_HISTORY.log`, `database/`, `backups/`, and `scripts/*` to
+`/opt/rah/apps/hcopilot` — but that path existed only inside
+`platform-backend-1`'s own container filesystem. Confirmed directly:
+`docker inspect platform-backend-1`'s real mounts covered
+`release_storage_path`, `contracts/1.0`, and the Docker socket only — no
+mount for `deployments_path` at all. The real `or-stt` host's own
+`/opt/rah/apps/hcopilot` was nearly empty.
+
+**Root cause:** Platform's own Compose definition for the `backend`
+service never declared a bind mount for `config.deployments_path`
+(`/opt/rah/apps`) or `config.backups_path` (`/opt/rah/backups`) — a
+missing volume declaration, the same category of gap `release_storage_path`
+already correctly has. Generic to every real Application, not
+HCopilot-specific.
+
+**At fault:** Platform.
+
+**Why it mattered:** `installation.read_rendered_env()` — which `PL8a`'s
+entire update path uses to preserve secrets across an update (§7.16) —
+depends on this file surviving on disk. It didn't, durably: only as long
+as that one `platform-backend-1` container instance was never recreated.
+`backup.py` writes real backup artifacts under `config.backups_path`,
+deliberately isolated from replaceable container filesystems per §9.20 —
+same gap, same consequence. `B5` (Update Path, the next slice) would have
+hit this immediately.
+
+**Fix:** Added two bind mounts to `or-stt`'s own local, untracked
+`docker-compose.override.yml` (not the repo's tracked
+`platform/docker-compose.yml`, which stays pointed at Golden Fixtures):
+`/opt/rah/apps:/opt/rah/apps` and `/opt/rah/backups:/opt/rah/backups`,
+identity-mapped to match `config.py`'s own existing container-path
+defaults. Before recreating `platform-backend-1`, the trapped
+`/opt/rah/apps/hcopilot` contents were rescued via `docker cp` and
+restored into the new host-backed path afterward, and the real DB
+password was independently confirmed recoverable from
+`hcopilot-sqlserver-1`'s own env as a second safety net. The real
+`hcopilot-*` containers (created via the Docker socket against the host
+daemon, not stored inside `platform-backend-1`) were confirmed untouched
+throughout.
+
+**Status:** ✅ Fixed. Verified for real: `platform-backend-1` recreated
+with the new mounts; `hcopilot-*` containers confirmed still `Up`/healthy
+and unaffected; restored files confirmed genuinely present on the real
+host filesystem (not just inside the container); `verify_deployment`
+(`MANUAL`) and `reconcile_application_state` both re-run afterward,
+reporting `PASS`/`CONSISTENT` — identical to before the recreate. Full
+Platform test suite reconfirmed clean afterward: **167 passed, 0 failed,
+575.39s**, matching `B3`'s own baseline exactly. Documented as slice
+**`B3+`** in the Period B task table (all seven Testing Record items
+PASS).
+
+### 9. Platform: `database_connectivity`/`migration_state` verification checks are unimplemented stubs, non-mandatory
+
+**What was found:** Running independent `MANUAL` verification against the
+real, SQL-Server-backed HCopilot deployment (`database.required: true`)
+returned `database_connectivity`/`migration_state` as `NOT_EXECUTED`
+("...checking is not implemented in Period A") rather than a real result
+— yet the overall verification run still reported `PASS`, because neither
+check is in `verification.py`'s `MANDATORY_CHECK_KEYS`.
+
+**Root cause:** Deliberate, and explicitly anticipated in `verification.py`'s
+own module docstring, written during `PL7`: "no real DB connectivity
+checking is built in Period A." HCopilot is the *first* real Application
+with `database.required: true` that this code has ever run against —
+every Golden Fixture used through `PL7`/`PL9b` had `database.required:
+false`, so this deferred scope never had a live case to surface it until
+now. Same applies to `backend_health`/`frontend_reachability`: both check
+for the literal string `"backend_health"`/`"frontend_reachability"`
+inside the manifest's own `verification.required_checks` list, but
+HCopilot's `required_checks` are free-text prose sentences (e.g. "Backend
+/health returns HTTP 200 on BACKEND_PORT"), not the Contract's standard
+machine-readable identifiers — so both always resolve `NOT_APPLICABLE`
+for HCopilot specifically, structurally, regardless of real backend/
+frontend health.
+
+**At fault:** Not a defect against current scope — an already-documented
+Period A deferral, now concretely relevant for the first time.
+
+**Independent proof gathered instead (`B4`'s own job):** direct `sqlcmd`
+query inside `hcopilot-sqlserver-1` confirmed `HCopilotDB.Doctors` = 18
+rows, `HCopilotDB.EDbeds` = 24 rows (genuinely reachable and populated,
+matching the manifest's own required-check text exactly); direct `curl`
+from the real host confirmed backend `/health` → `200`, frontend root →
+`200`, and the frontend→backend nginx proxy path → `200`.
+
+**Status:** 🟡 **Open, tracked, not blocking.** A real, now-concrete gap:
+Platform cannot yet automatically detect a genuine SQL Server connectivity
+failure for HCopilot on its own. Real implementation would mean a `docker
+exec sqlcmd` check (mirroring the release's own manifest text) plus
+teaching the Packager to emit the Contract's standard check identifiers
+into `required_checks` instead of prose. Left open deliberately — implementing
+new verification capability is a scope decision distinct from `B4`'s own
+completion gate, which `B4` satisfies through direct, independent evidence
+instead (above). Worth a decision before it recurs for other
+database-required apps.
