@@ -7,6 +7,8 @@ services:
       POSTGRES_PASSWORD: rah_platform
     volumes:
       - rah_platform_pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rah_platform -d rah_platform"]
       interval: 5s
@@ -15,11 +17,15 @@ services:
 
   backend:
     build: .
+    network_mode: host
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      RAH_DATABASE_URL: postgresql+psycopg://rah_platform:rah_platform@postgres:5432/rah_platform
+      # host networking means "postgres" no longer resolves via the
+      # bridge network's internal DNS -- reached via the host's loopback
+      # instead, same as everything else backend now sees as "localhost".
+      RAH_DATABASE_URL: postgresql+psycopg://rah_platform:rah_platform@localhost:5432/rah_platform
       RAH_RELEASE_STORAGE_PATH: /data/releases
       RAH_CONTRACTS_PATH: /contracts/1.0
       RAH_LOG_LEVEL: INFO
@@ -27,15 +33,17 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../tests/fixtures/releases:/data/releases
       - ../contracts/1.0:/contracts/1.0:ro
-    ports:
-      - "8000:8000"
+    # No ports: section -- network_mode: host means the container's own
+    # listen port (8000) is already the host's port 8000 directly.
 
   frontend:
     build: ./frontend
+    network_mode: host
     depends_on:
       - backend
-    ports:
-      - "8080:80"
+    # No ports: section -- see backend's own comment above. nginx.conf
+    # listens on 8080 directly (not the usual 80) since there is no more
+    # host-port remapping once this container shares the host's network.
 
 volumes:
   rah_platform_pg_data:
