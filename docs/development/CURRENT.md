@@ -1,5 +1,13 @@
 # Current Development State
 
+**As of 2026-08-21**: Period A (both tracks, Packager and Platform) is
+fully closed — see "Current Mission" step 6 below for the complete exit-
+gate evidence. **Period B has started**: `B0` is DONE, `B1` is next —
+see "Period B — Integration" below. The rest of this "Current Phase"
+section is preserved as Period A's own detailed historical record and is
+no longer the live status; skip to "Period B — Integration" for what's
+actually current.
+
 ## Current Phase
 
 Period A has two independent tracks. Release Contract V1 remains
@@ -467,16 +475,36 @@ Phase 1**: real Indicator app, real Legion/`or-stt`/offline-VM lab
 hardware — `rah package` built two real Docker images and a full
 candidate Release, then correctly refused to finalize it at `RC-SCR-005`
 (Indicator's lifecycle scripts committed without the executable bit — a
-real Indicator-repo gap, not a Packager bug). Phases 2–6 not reached; the
-offline VM was never touched. See
+real Indicator-repo gap, not a Packager bug). Phases 2–6 not reached in
+this first attempt; the offline VM was never touched. Full Testing
+Record: `docs/development/Period A — Independent Product Development;
+Packager/3. Real Manual Acceptance Test — Results.md`.
+
+**`P8` (Model Artifacts & Offline-Completeness Closure) DONE**, and
+**the Real Manual Acceptance Test subsequently passed all 6 phases for
+real, 2026-08-20**, closing out the Packager side of Period A in full.
+This section stops narrating slice-by-slice detail here rather than
+duplicate it a third time (it already lives in full above, under
+"Current Phase," and in
 `docs/development/Period A — Independent Product Development;
-Packager/3. Real Manual Acceptance Test — Results.md` for the full
-Testing Record and a Packager design note (`rah construct`'s
-`shutil.copy2` at `construct_release.py:127` copies scripts with no
-`chmod` enforcement, so a full Docker build runs before `RC-SCR-005`
-catches this at the very end — cheap to catch earlier). Environment is
-primed for an immediate re-run once Indicator's script permissions are
-fixed and re-committed.
+Packager/2. Initial Slicing Task Table.md`, this project's actual
+per-slice source of truth) — see either for the complete story,
+including the three real bugs found and fixed during the Real Manual
+Acceptance Test's Phase 4 (one serious: an image-tag export bug
+affecting every Release the Packager had ever produced) and `P9`'s
+subsequent full-fleet retest (all 5 real apps PASS).
+
+**Packager Period A Exit Gate: satisfied.** "A real application can be
+initialized, inspected, assisted through Claude, planned, built,
+packaged, validated, finalized, manually installed offline, and a
+second Release can be produced without corrupting version history" —
+demonstrated for real against Indicator (all 6 phases) and confirmed
+across the other 4 real apps via `P9`. Two loose ends remain, neither
+part of the Exit Gate itself: the Playbook §11a/§7a mirror-sync (see
+"Future Design Tasks" / Open Items above), and merging the
+STT-SCHEDULE `offline-deployment` branch (paused — real merge conflicts
+with `master`'s own in-progress work, handed off to a session with more
+context on that repo).
 
 ## Period A — Platform
 
@@ -726,7 +754,100 @@ Platform/2. Initial Slicing Task Table.md`.
 
 ## Period B — Integration
 
-Status: NOT STARTED
+Status: **STARTED — `B0`, `B1`, `B2` DONE** (2026-08-21), `B3` next. Entry Gate met (2026-08-20): `docs/development/Period B — Cross-Product Integration/1. Initial GPT Proposal.md` (lines 43–79) requires both Period A tracks to independently pass their own Minimum Gate before Period B may begin — not "development has progressed far enough," an explicit gate. Both are now real, evidence-backed, not assumed:
+
+- **Packager Minimum Gate** — met: init, inspect, validate engineering answers, plan, build Docker artifacts, construct, validate against the Contract, finalize, produce a stable Release fingerprint, produce a Release that can be manually installed offline. All demonstrated for real, most recently via the 6-phase Real Manual Acceptance Test against Indicator and the `P9` full-fleet retest (5/5 real apps).
+- **Platform Minimum Gate** — met: scan Golden Releases, import them, represent Applications/Releases correctly, plan installations, install a Golden Release, verify it, update between compatible Golden Releases, preserve backup/history, detect failures and drift, expose operation results via the API. All demonstrated for real via `PL0`–`PL9b`, most recently the real 23-step Offline Acceptance Scenario on the genuinely air-gapped Offline Validation VM.
+
+**`2. Initial Slicing Task Table.md` written, 2026-08-20** — the same
+Master Matrix + pre-implementation review both Period-A tracks got before
+their own `P0`/`PL0`, adapted for Period B. Two real revisions to the
+proposal's own slice map: `B5` (Update Path) upgraded from a single
+`A → B` transition to a real 3-version `A → B → C` chain (two update
+hops, not one — a single hop can hide a bug the second one wouldn't), and
+a new `B7` (Full Fleet Install/Update Confidence) added, mirroring how
+Packager's own `P9` extended `P0`–`P8`'s single-app proof to all 5 real
+apps. **A third revision, `B8` (Genuine Offline Confirmation), added
+2026-08-21** after directly executing `B0`–`B2`: the original proposal's
+`B6` was scoped for the genuinely air-gapped Validation VM, but the
+revision moved every slice (including `B6`) onto `or-stt` (online) —
+correct for proving Contract agreement, but it means the current plan
+never actually re-proves a real Packager Release working through a
+genuinely air-gapped Platform (each product alone was already proven
+offline in Period A — `PL9b` for Platform with Golden Fixtures, the Real
+Manual Acceptance Test for the Packager — but never the two together).
+`B8` promotes that from an implicit footnote to a committed closing
+slice: the same procedure already proven on `or-stt`, run once for real
+on `Offline-AirGapped-Simulator`. Also settles two real questions with
+live findings, not
+assumptions: the Platform has no CLI and doesn't need one — for Period B
+or for Period C's eventual Jenkins automation, since Jenkins drives REST
+APIs directly and `PL1`'s own async operation pattern is already exactly
+the shape CI/CD expects; and a real, working control channel already
+exists — Platform is live right now on `or-stt`
+(`172.26.121.111:8000`/`:8080`, confirmed via `docker ps`), its API is
+directly reachable from the Legion with no SSH hop, and orchestration
+should run from the Legion (matching this whole session's own proven
+pattern), with the one necessary exception that a built Release must be
+transferred to a **dedicated** release-storage directory on `or-stt`
+(not the Golden Fixtures folder Platform's `RAH_RELEASE_STORAGE_PATH`
+currently points at) before Platform can discover it at all. Recommended
+first slice: **`B0` — Integration Harness & Traceability**. See
+`docs/development/Period B — Cross-Product Integration/2. Initial
+Slicing Task Table.md` for the full review and matrix.
+
+**`B0` DONE, 2026-08-21.** Platform on `or-stt` now reads from a
+dedicated `~/rah-platform-releases/` directory instead of the Golden
+Fixtures folder (`docker-compose.override.yml`, local to `or-stt`,
+untracked — live-confirmed via `health/ready` and an empty real scan;
+every other container on the shared machine kept its original uptime,
+untouched). A real `HCopilot_Release_1.0.3` was packaged on the Legion
+(`overall_result: PASS`, fingerprint
+`sha256:0097505413d24092750e57f92d27e137e909fbbdc0c799c80b22c6609389590e`)
+and transferred to that directory over the existing `orstt_key` SSH
+channel — fingerprint matched before and after transfer, and again after
+a deliberate delete-and-retransfer (repeatability). One real finding,
+root-caused and fixed: an independent `rah validate` against the
+transferred copy first came back `FAIL` on two rules
+(`RC-CFG-001`/`RC-SEC-003`, real-looking secrets in the config template)
+despite `checksum_mismatches: []` — traced to `or-stt`'s cached
+`rah-packager` image being 9 days stale (built 2026-08-11, predating a
+placeholder-regex fix already present in that machine's own source
+checkout), not a Packager bug or a real secret. Rebuilt the image on
+`or-stt` from its current checkout; re-validated clean, all 56 rules
+PASS/`NOT_APPLICABLE`. No installation, scan, or import performed yet —
+deliberately `B1`/`B2`'s job. See
+`docs/development/Period B — Cross-Product Integration/2. Initial
+Slicing Task Table.md` for the full Testing Record and `B0-INT-001`.
+
+**`B1` DONE, 2026-08-21.** No new code — `PL2`'s scanner was already
+fully built in Period A; this slice proved it against real Packager
+output. A real `POST /release-candidates/scan` on `or-stt` found
+`HCopilot_Release_1.0.3` (left in place by `B0`) as `READY_FOR_IMPORT`,
+identity matching exactly (`hcopilot`/`1.0.3`); repeated scanning
+produced no duplicate; a deliberately partial second copy (checksums/
+docker-images omitted) was correctly classified `INCOMPLETE` with the
+precise reason while the real candidate stayed untouched; a live
+`sha256sum` of the real candidate's `release.yaml` still matched `B0`'s
+recorded fingerprint.
+
+**`B2` DONE, 2026-08-21.** No new code — `PL3` already handled real
+input correctly. Real import of `HCopilot_Release_1.0.3` succeeded,
+creating application `hcopilot` for the first time; every manifest field
+checked (`compose_project_name`, `canonical_path`, contract/schema
+versions, `supported_operations`) matched the real `release.yaml`
+exactly; fingerprint matched (cosmetic `sha256:` prefix difference only);
+duplicate import was predictable (`already_imported: true`, no
+duplicate row); a deliberately corrupted, genuinely new-identity test
+candidate (`hcopilot@1.0.4`) was correctly rejected with real
+`PLT-INTEGRITY-002` and exact per-file mismatches, no partial state
+left behind. One real nuance recorded, not a confirmed defect: a
+same-identity duplicate with a tampered *non-manifest* file short-
+circuits on the "already imported" identity match without re-verifying
+that specific directory — consistent with this project's own prior
+decision that the Release fingerprint is deliberately `release.yaml`-only.
+See the Period B task table for the full record. `B3` (Fresh
+Installation) is next.
 
 ## Period C — Jenkins
 
@@ -747,39 +868,40 @@ Status: NOT STARTED
    the release Contract V1. It is good. We will build on it."* Any edit is
    explicitly deferred by the user to later, not reopened speculatively.
 6. Begin Period A development (Packager and Platform, independently) —
-   **IN PROGRESS**. Packager `P0`, `P1` (Project Initialization,
-   `rah init`), `P2` (Repository Inspection, `rah inspect`), `P3`
-   (Claude Knowledge Bridge, `rah prepare-answers` + `rah validate-answers`),
-   `P4` (Release Planning, `rah plan`), `P5` (Docker Build and
-   Artifact Preparation, `rah build`), `P6` (Release Construction,
-   `rah construct`), and `P7`'s automated portion (Validation and
-   Finalization, `rah package`/`rah validate`) all done and tested, and
-   `P8` (Model Artifacts & Offline-Completeness Closure) also done. **The
-   Real Manual Acceptance Test passed end-to-end, 2026-08-20** — Attempt 1
-   (2026-08-11) FAILED at Phase 1 on an Indicator-repo defect
-   (non-executable lifecycle scripts), now fixed; Attempt 3 (2026-08-20)
-   passed all six phases for real against real lab hardware (`or-stt`,
-   `Offline-AirGapped-Simulator`), the last piece of the Period A Packager
-   Exit Gate. Three real bugs found and fixed getting there, one serious
-   (a Packager image-export bug affecting every prior Release — see
-   "Open Items"). `P9` (Full Fleet Validation & Period A Close) is next,
-   not yet started. See
-   `docs/development/Period A — Independent Product Development;
-   Packager/3. Real Manual Acceptance Test — Results.md`. Platform track: slicing
-   proposal reviewed and accepted, `PL0` (Runtime, Database & Test
-   Foundation), `PL1` (Generic Operation Framework), `PL2` (Release
-   Discovery), `PL3` (Release Import and Registry), `PL4` (Application
-   State and Action Intelligence), `PL5` (Deployment Planning and
-   Configuration), `PL6` (Fresh Installation Execution), `PL7`
-   (Verification and Host Reconciliation), `PL8a` (Backup and Update),
-   `PL8b` (Recovery), `PL9a` (Operator UI Integration), and `PL9b`
-   (Offline VM Acceptance) all done and tested — the full 23-step
-   Offline Acceptance Scenario ran for real on the genuinely air-gapped
-   Offline Validation VM, found and fixed a real `RECOVER`-availability
-   gap live. **The entire Platform track (`PL0`–`PL9b`) is complete**,
-   satisfying the Period-A Platform Exit Gate in full — see
-   `docs/development/Period A — Independent Product Development;
-   Platform/2. Initial Slicing Task Table.md`.
+   **DONE**. Both tracks' own Period A Exit Gates are satisfied for real,
+   not assumed:
+   - **Packager**: `P0`–`P7` (automated portion) built and tested, `P8`
+     (Model Artifacts & Offline-Completeness Closure) done, then **the
+     Real Manual Acceptance Test passed end-to-end, 2026-08-20** — Attempt
+     1 (2026-08-11) FAILED at Phase 1 on an Indicator-repo defect
+     (non-executable lifecycle scripts), now fixed; a later attempt passed
+     all six phases for real against real lab hardware (`or-stt`,
+     `Offline-AirGapped-Simulator`). Three real bugs found and fixed
+     getting there, one serious (a Packager image-export bug affecting
+     every prior Release). **`P9` (Full Fleet Validation) then confirmed
+     all 5 real apps** (HCopilot, Indicator, STT-SCHEDULE, Voice Project,
+     HCAT) pass `rah package` for real. See
+     `docs/development/Period A — Independent Product Development;
+     Packager/2. Initial Slicing Task Table.md` and
+     `.../3. Real Manual Acceptance Test — Results.md`.
+   - **Platform**: `PL0`–`PL9b` all done and tested — the full 23-step
+     Offline Acceptance Scenario ran for real on the genuinely air-gapped
+     Offline Validation VM, found and fixed a real `RECOVER`-availability
+     gap live. See
+     `docs/development/Period A — Independent Product Development;
+     Platform/2. Initial Slicing Task Table.md`.
+
+   Two loose Packager-track ends remain open, neither part of either Exit
+   Gate: the Playbook §11a/§7a mirror-sync, and merging the STT-SCHEDULE
+   `offline-deployment` branch (paused on real conflicts with `master`'s
+   own in-progress work).
+7. Begin Period B (Cross-Product Integration) — **READY TO START, not yet
+   begun**. Both Period A tracks' Minimum Gates (defined in
+   `docs/development/Period B — Cross-Product Integration/1. Initial GPT
+   Proposal.md`, lines 43–79) are met, which is Period B's own explicit
+   Entry Gate — it does not start merely because development has
+   progressed far enough. Recommended first slice: `B0` (Integration
+   Harness & Traceability) — see "Period B — Integration" above.
 
 ## Candidate Applications for Packager/Platform Acceptance Testing
 
