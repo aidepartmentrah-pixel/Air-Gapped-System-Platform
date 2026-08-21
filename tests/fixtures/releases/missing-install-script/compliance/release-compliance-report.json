@@ -6,7 +6,7 @@
   "release_identity": {
     "application_slug": "missing-script-app",
     "version": "1.0.0",
-    "release_fingerprint": "sha256:8006bab9284ecedabd125e967a3e500b839964286cc7ece0d6174fa137f4add4"
+    "release_fingerprint": "sha256:248b4ad360ff304d0b74a2f407e3b54ce41f942bf49ea4559eaa746af7775e06"
   },
   "validation_environment": "Platform Golden Fixture Generator",
   "overall_result": "PASS",

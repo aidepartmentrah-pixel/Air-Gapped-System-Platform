@@ -6,7 +6,7 @@
   "release_identity": {
     "application_slug": "golden-test-app",
     "version": "1.1.0",
-    "release_fingerprint": "sha256:d07e090138239c3587ccb2b124f4082365ba7252845f959b36d3a86c1d101bb4"
+    "release_fingerprint": "sha256:39ebbe9b6a040c0f1ee31d3f099249cb114735cc1ed8b50b3d0f89e5ec64957c"
   },
   "validation_environment": "Platform Golden Fixture Generator",
   "overall_result": "PASS",

@@ -6,7 +6,7 @@
   "release_identity": {
     "application_slug": "secret-app",
     "version": "1.1.0",
-    "release_fingerprint": "sha256:084b18228225024ca317bda73cb3ba9c87037d683df16704b319dfea6cb45181"
+    "release_fingerprint": "sha256:2646fca41d5d05f6c483568f8c1f921ddfe734508e87534361c887dd0b7e939a"
   },
   "validation_environment": "Platform Golden Fixture Generator",
   "overall_result": "PASS",

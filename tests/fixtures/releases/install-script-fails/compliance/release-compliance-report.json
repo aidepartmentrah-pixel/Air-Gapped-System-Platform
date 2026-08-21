@@ -6,7 +6,7 @@
   "release_identity": {
     "application_slug": "script-fail-app",
     "version": "1.0.0",
-    "release_fingerprint": "sha256:1b5d96e404461ba2183fed259c05a2a0f9b10b25d891ca1ac70f154e72ae9c8e"
+    "release_fingerprint": "sha256:4bbbd13e1d9ef641878478874c667b251bb63bd645e1a9c7c246d09d48bd79cc"
   },
   "validation_environment": "Platform Golden Fixture Generator",
   "overall_result": "PASS",

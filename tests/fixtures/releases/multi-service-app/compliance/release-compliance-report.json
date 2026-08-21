@@ -6,7 +6,7 @@
   "release_identity": {
     "application_slug": "multi-service-app",
     "version": "1.0.0",
-    "release_fingerprint": "sha256:c9ad2913b75e22cfa8b752c925580a557e3093215f94f23af6f8d6850b7d960a"
+    "release_fingerprint": "sha256:7237a95796a9fcae5a1ef3deb41de2975b7b9f50735df437486ac997118e212d"
   },
   "validation_environment": "Platform Golden Fixture Generator",
   "overall_result": "PASS",

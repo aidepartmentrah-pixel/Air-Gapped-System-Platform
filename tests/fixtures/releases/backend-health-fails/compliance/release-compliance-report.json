@@ -6,7 +6,7 @@
   "release_identity": {
     "application_slug": "health-fail-app",
     "version": "1.0.0",
-    "release_fingerprint": "sha256:39f45f5d0c4fa07768e5117ffb9bf818137b8a01ae774d408c25d90630916056"
+    "release_fingerprint": "sha256:291984a7aa039a560ecb958bf93ab6a4bba7005fe3174155e8be0c68b665a80e"
   },
   "validation_environment": "Platform Golden Fixture Generator",
   "overall_result": "PASS",

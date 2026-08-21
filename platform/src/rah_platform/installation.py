@@ -268,7 +268,8 @@ def _execute_install(engine, config: Config, operation_id: str, application_id: 
 
         operations.update_stage(engine, operation_id, "EXECUTING_SCRIPT")
         entrypoint = manifest["deployment"]["entrypoints"].get("install")
-        script_path = os.path.join(canonical_path, "scripts", entrypoint) if entrypoint else None
+        # entrypoint is already a full path relative to the Release root (e.g. "scripts/install_offline.sh")
+        script_path = os.path.join(canonical_path, entrypoint) if entrypoint else None
         if not entrypoint or not os.path.isfile(script_path):
             raise InstallationScriptMissingError(
                 "The declared install script does not exist.",

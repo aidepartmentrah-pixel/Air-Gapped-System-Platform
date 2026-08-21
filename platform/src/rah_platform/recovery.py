@@ -100,7 +100,8 @@ def _perform_restore(engine, config: Config, *, operation_id: str, application_i
 
     with engine.connect() as conn:
         directory_name = _release_storage_directory(conn, release_row["release_id"])
-    script_path = os.path.join(config.release_storage_path, directory_name, "scripts", entrypoint)
+    # entrypoint is already a full path relative to the Release root
+    script_path = os.path.join(config.release_storage_path, directory_name, entrypoint)
     if not os.path.isfile(script_path):
         raise RestoreScriptFailedError(
             "The declared restore script does not exist.",

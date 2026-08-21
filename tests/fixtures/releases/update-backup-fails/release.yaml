@@ -25,11 +25,11 @@ deployment:
   canonical_path: /opt/rah/apps/golden-test-app
   compose_project_name: rah-golden-test-app
   entrypoints:
-    install: install_offline.sh
-    update: update_offline.sh
-    verify: verify_deployment.sh
-    backup: backup_database.sh
-    restore: restore_database.sh
+    install: scripts/install_offline.sh
+    update: scripts/update_offline.sh
+    verify: scripts/verify_deployment.sh
+    backup: scripts/backup_database.sh
+    restore: scripts/restore_database.sh
   supported_operations:
     fresh_install: true
     update: true
@@ -62,12 +62,12 @@ database:
   target_schema_version: 1.1.0
   migration:
     required_for_update: true
-    entrypoint: migrate.sh
+    entrypoint: scripts/migrate.sh
   backup_before_update:
     required: true
-    entrypoint: backup_database.sh
+    entrypoint: scripts/backup_database.sh
   recovery:
-    entrypoint: restore_database.sh
+    entrypoint: scripts/restore_database.sh
 persistent_state:
   preserve_during_update:
   - production_configuration
@@ -83,7 +83,7 @@ client:
   preparation_required: false
   https_required: false
 verification:
-  entrypoint: verify_deployment.sh
+  entrypoint: scripts/verify_deployment.sh
   required_checks:
   - docker_services
 documentation:

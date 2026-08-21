@@ -259,7 +259,8 @@ def _execute_update(
             operations.log(conn, operation_id, "Deployment directory replaced and configuration rendered for the target Release.")
 
         entrypoint = manifest["deployment"]["entrypoints"].get("update")
-        script_path = os.path.join(canonical_path, "scripts", entrypoint) if entrypoint else None
+        # entrypoint is already a full path relative to the Release root (e.g. "scripts/update_offline.sh")
+        script_path = os.path.join(canonical_path, entrypoint) if entrypoint else None
         if not entrypoint or not os.path.isfile(script_path):
             raise UpdateScriptMissingError(
                 "The declared update script does not exist.",
@@ -292,8 +293,9 @@ def _execute_update(
         if migration_decl.get("required_for_update", False):
             operations.update_stage(engine, operation_id, "MIGRATING")
             migration_entrypoint = migration_decl.get("entrypoint")
+            # migration_entrypoint is already a full path relative to the Release root
             migration_script_path = (
-                os.path.join(canonical_path, "scripts", migration_entrypoint) if migration_entrypoint else None
+                os.path.join(canonical_path, migration_entrypoint) if migration_entrypoint else None
             )
             if not migration_entrypoint or not os.path.isfile(migration_script_path):
                 raise MigrationFailedError(

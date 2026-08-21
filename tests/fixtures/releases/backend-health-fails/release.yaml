@@ -24,8 +24,8 @@ deployment:
   canonical_path: /opt/rah/apps/health-fail-app
   compose_project_name: rah-health-fail-app
   entrypoints:
-    install: install_offline.sh
-    verify: verify_deployment.sh
+    install: scripts/install_offline.sh
+    verify: scripts/verify_deployment.sh
   supported_operations:
     fresh_install: true
     update: false
@@ -65,7 +65,7 @@ client:
   preparation_required: false
   https_required: false
 verification:
-  entrypoint: verify_deployment.sh
+  entrypoint: scripts/verify_deployment.sh
   required_checks:
   - docker_services
   - backend_health
